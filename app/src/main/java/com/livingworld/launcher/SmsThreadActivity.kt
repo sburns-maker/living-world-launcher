@@ -33,16 +33,24 @@ class SmsThreadActivity : Activity() {
     val stack = UiKit.vertical(this, 8)
     scroll.addView(stack)
     root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-    SmsThreads.messages(this, id).forEach { m ->
-      val bubble = UiKit.text(this, m.body, 16f, UiKit.ink).apply {
+    val timeline = (
+      SmsThreads.messages(this, id).map { Triple(it.timestamp, it.outgoing, it.body) } +
+      MmsHistory.messages(this, id).map { m ->
+        val attachmentLabel = if (m.mediaParts.isEmpty()) "" else
+          "\n" + m.mediaParts.joinToString(", ") { it.mimeType.substringBefore("/") + " attachment" }
+        Triple(m.timestampMillis, m.outgoing, m.text + attachmentLabel)
+      }
+    ).sortedBy { it.first }
+    timeline.forEach { m ->
+      val bubble = UiKit.text(this, m.third.ifBlank { "MMS message" }, 16f, UiKit.ink).apply {
         setPadding(UiKit.dp(this@SmsThreadActivity, 12), UiKit.dp(this@SmsThreadActivity, 9),
           UiKit.dp(this@SmsThreadActivity, 12), UiKit.dp(this@SmsThreadActivity, 9))
         background = UiKit.surface(this@SmsThreadActivity,
-          if (m.outgoing) android.graphics.Color.rgb(222, 235, 255) else android.graphics.Color.WHITE)
+          if (m.second) android.graphics.Color.rgb(222, 235, 255) else android.graphics.Color.WHITE)
         maxWidth = (resources.displayMetrics.widthPixels * 0.83f).toInt()
       }
       val line = LinearLayout(this).apply {
-        gravity = if (m.outgoing) Gravity.END else Gravity.START
+        gravity = if (m.second) Gravity.END else Gravity.START
         addView(bubble)
       }
       stack.addView(line)
