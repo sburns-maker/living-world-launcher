@@ -6,12 +6,12 @@
   GPL-3.0 application, actively maintained, working SMS/MMS and groups. Use as behavioral reference; copying GPL application sources entails GPL compliance.
 - Fossify mmslib: https://github.com/FossifyOrg/mmslib
   Apache-2.0 library, documented `org.fossify:mmslib:1.0.0`.
-  This is our preferred independently reusable MMS transport/encoding foundation, subject to dependency resolution, NOTICE and attribution checks.
+  This is a candidate MMS transport/encoding foundation. **Dependency resolution failed in Android builds #82 and #84** for org.fossify:mmslib:1.0.0 against Google/Maven Central/Sonatype snapshots. The dependency was removed to keep CI green. Integrate audited source as a module or locate a verified Maven coordinate before adding it back.
 - QUIK SMS: https://github.com/quik-sms/quik
   GPL-3.0 app, actively maintained in 2026. Secondary integration/reference model.
 
 ## Integration prerequisites
-1. Confirm mmslib artifact resolves in project's current Maven setup and builds with SDK 35, Kotlin, and existing Gradle setup.
+1. Identify an accessible library source: upstream library source module under its Apache-2.0 license, or a verified binary artifact. Build source with SDK 35 and existing Gradle setup; do not guess Maven coordinates.
 2. Integrate MMS PDU encode/decode, provider storage, MMSC configuration and subscription-specific carrier sending using a reviewed API rather than hand-authored partial MMS messages.
 3. Register protected MMS delivery and download receivers only after the handlers are functional.
 4. Add receive, send, and retry tests with fixture PDUs (single image, text-only MMS, group mixed recipients, GIF, unsupported/oversized media, carrier error).
