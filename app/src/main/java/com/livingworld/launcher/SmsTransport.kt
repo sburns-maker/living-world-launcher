@@ -4,11 +4,9 @@ import android.app.PendingIntent
 import android.app.Activity
 import android.content.ContentValues
 import android.provider.Telephony
-import android.telephony.SubscriptionManager
 import android.content.Context
 import android.content.Intent
 import android.telephony.SmsManager
-import android.telephony.SubscriptionManager
 
 /**
  * SMS transport isolated from the UI.
@@ -42,6 +40,7 @@ object SmsTransport {
   fun send(context: Context, address: String, body: String): Validation {
     val verdict = validate(context, address, body)
     if (verdict !is Validation.Ready) return verdict
+    @Suppress("DEPRECATION")
     val manager = SmsManager.getDefault()
     val parts = manager.divideMessage(body)
     if (parts.isEmpty()) return Validation.Blocked("No message parts to send")
