@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main, feature/native-launcher-foundation, feature/unified-messages-foundation, feature/messages-notification-bridge]
   push:
-    branches: [main]
+    branches: [main, feature/messages-ui-review]
 jobs:
   assemble-debug:
     runs-on: ubuntu-latest
