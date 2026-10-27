@@ -2,6 +2,9 @@ package com.livingworld.launcher
 
 import android.app.Activity
 import android.os.Bundle
+import android.content.Intent
+import android.net.Uri
+import android.webkit.WebResourceRequest
 import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -26,9 +29,18 @@ class WorldInboxActivity : Activity() {
     val view = WebView(this).apply {
       settings.javaScriptEnabled = true
       settings.domStorageEnabled = true
-      webViewClient = WebViewClient()
+      webViewClient = object : WebViewClient() {
+        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+          val url = request?.url?.toString() ?: return false
+          if (WorldBackend.isAllowed(url)) return false
+          return try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            true
+          } catch (_: Exception) { true }
+        }
+      }
       webChromeClient = WebChromeClient()
-      loadUrl("https://screen-to-same-studio.lovable.app/inbox")
+      loadUrl(WorldBackend.INBOX_URL)
     }
     web = view
     root.addView(view, LinearLayout.LayoutParams(-1, 0, 1f))
