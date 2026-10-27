@@ -124,13 +124,13 @@ class LauncherActivity : Activity() {
       "Camera" to findApp("Camera"),
       "Settings" to findApp("Settings")
     )
-    root.addView(grid(favorites) { key ->
+    root.addView(grid(favorites, { key ->
       when (key) {
         "Living World" -> ({ world() })
         "Settings" -> ({ startActivity(Intent(Settings.ACTION_SETTINGS)) })
         else -> null
       }
-    })
+    }))
     root.addView(View(this), LinearLayout.LayoutParams(1, 0, 0.15f))
     val dock = listOf(
       "Phone" to findApp("Phone"),
@@ -178,14 +178,14 @@ class LauncherActivity : Activity() {
       val filtered = apps.filter { it.label.toString().contains(query, true) }
       val all = listOf("Living World" to null, "Messages" to null, "Contacts" to null) +
         filtered.map { it.label.toString() to it }
-      holder.addView(grid(all) { key ->
+      holder.addView(grid(all, { key ->
         when (key) {
           "Living World" -> ({ world() })
           "Messages" -> ({ messages() })
           "Contacts" -> ({ contacts() })
           else -> null
         }
-      })
+      }))
     }
     render("")
     search.addTextChangedListener(object : android.text.TextWatcher {
