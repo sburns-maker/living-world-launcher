@@ -149,6 +149,6 @@ class UnifiedMessagesActivity : Activity() {
     catch (_: Exception) { Toast.makeText(this, "Google Messages unavailable", Toast.LENGTH_SHORT).show() }
   }
   private fun openWorld() {
-    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://screen-to-same-studio.lovable.app")))
+    startActivity(Intent(this, WorldInboxActivity::class.java))
   }
 }
