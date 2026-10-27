@@ -1,6 +1,9 @@
 package com.livingworld.launcher
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.app.RemoteInput
+import android.app.PendingIntent
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
@@ -100,9 +103,44 @@ class UnifiedMessagesActivity : Activity() {
       val card = UiKit.vertical(this, 12).apply { background = UiKit.surface(this@UnifiedMessagesActivity) }
       card.addView(UiKit.text(this, item.sender, 15f, UiKit.ink, true))
       card.addView(UiKit.text(this, item.preview, 13f, UiKit.muted))
+      val actions = UiKit.horizontal(this)
+      if (item.openIntent != null) {
+        actions.addView(UiKit.clickable(this, "Open chat") {
+          try { item.openIntent.send() }
+          catch (_: PendingIntent.CanceledException) { openGoogleMessages() }
+        })
+      }
+      if (item.replyAction?.remoteInputs?.isNotEmpty() == true) {
+        actions.addView(UiKit.clickable(this, "Reply") { replyTo(item.notificationKey) })
+      }
+      card.addView(actions)
       root.addView(card)
       root.addView(UiKit.gap(this, 8))
     }
+  }
+  private fun replyTo(key: String) {
+    val entry = BridgeInbox.find(key) ?: return
+    val action = entry.replyAction ?: return
+    val inputs = action.remoteInputs ?: return
+    if (inputs.isEmpty()) return
+    val field = EditText(this).apply { hint = "Reply"; isSingleLine = false; maxLines = 5 }
+    AlertDialog.Builder(this).setTitle("Reply to " + entry.sender)
+      .setView(field)
+      .setNegativeButton("Cancel", null)
+      .setPositiveButton("Send") { _, _ ->
+        val message = field.text.toString().trim()
+        if (message.isEmpty()) return@setPositiveButton
+        val results = android.os.Bundle()
+        inputs.forEach { input -> results.putCharSequence(input.resultKey, message) }
+        val intent = Intent()
+        RemoteInput.addResultsToIntent(inputs, intent, results)
+        try {
+          action.actionIntent.send(this, 0, intent)
+          Toast.makeText(this, "Reply submitted to Google Messages", Toast.LENGTH_SHORT).show()
+        } catch (_: PendingIntent.CanceledException) {
+          Toast.makeText(this, "Reply expired. Open Google Messages.", Toast.LENGTH_LONG).show()
+        }
+      }.show()
   }
   private fun openGoogleMessages() {
     val intent = packageManager.getLaunchIntentForPackage(GoogleMessagesBridge.GOOGLE_MESSAGES)
@@ -111,6 +149,6 @@ class UnifiedMessagesActivity : Activity() {
     catch (_: Exception) { Toast.makeText(this, "Google Messages unavailable", Toast.LENGTH_SHORT).show() }
   }
   private fun openWorld() {
-    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://screen-to-same-studio.lovable.app")))
+    startActivity(Intent(this, WorldInboxActivity::class.java))
   }
 }
