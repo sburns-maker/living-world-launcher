@@ -35,7 +35,7 @@ class LauncherActivity : Activity() {
   override fun onResume() { super.onResume() }
 
   private fun world() = startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://screen-to-same-studio.lovable.app")))
-  private fun messages() = startActivity(Intent(this, UnifiedMessagesActivity::class.java))
+  private fun messages() = startActivity(Intent(this, WorldInboxActivity::class.java))
   private fun contacts() = startActivity(Intent(this, UnifiedContactsActivity::class.java))
   private fun launch(app: LauncherActivityInfo) {
     try { launcher.startMainActivity(app.componentName, Process.myUserHandle(), null, null) }
@@ -66,7 +66,7 @@ class LauncherActivity : Activity() {
       face.addView(ImageView(this).apply { setImageDrawable(drawable); scaleType = ImageView.ScaleType.FIT_CENTER },
         FrameLayout.LayoutParams(UiKit.dp(this, 52), UiKit.dp(this, 52), Gravity.CENTER))
     } else {
-      val glyph = when (name) { "Messages" -> "✉"; "Contacts" -> "●"; "All apps" -> "☷"; else -> name.take(1) }
+      val glyph = when (name) { "Messages" -> "●"; "Contacts" -> "●"; "All apps" -> "☷"; else -> name.take(1) }
       val circle = label(glyph, 25f, true).apply {
         gravity = Gravity.CENTER
         background = UiKit.surface(this@LauncherActivity, Color.rgb(112, 84, 193), 18)
