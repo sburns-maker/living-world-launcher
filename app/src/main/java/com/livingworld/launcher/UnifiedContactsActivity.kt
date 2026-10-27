@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.provider.ContactsContract
 import android.view.Gravity
 import android.widget.*
@@ -24,6 +25,9 @@ class UnifiedContactsActivity : Activity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    window.statusBarColor = UiKit.bg
+    window.navigationBarColor = UiKit.bg
+    window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
     val root = UiKit.vertical(this, 20).apply { setBackgroundColor(UiKit.bg) }
     setContentView(ScrollView(this).apply { isFillViewport = true; addView(root) })
     root.addView(UiKit.clickable(this, "‹  Home") { finish() })
@@ -39,11 +43,12 @@ class UnifiedContactsActivity : Activity() {
     root.addView(search)
     status = UiKit.text(this, "", 13f, UiKit.muted)
     root.addView(status)
-    root.addView(UiKit.clickable(this, "Allow real contacts (optional)") {
+    val allowContactsButton = UiKit.clickable(this, "Allow real contacts (optional)") {
       if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
         requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 101)
       else load()
     })
+    root.addView(allowContactsButton)
     root.addView(UiKit.gap(this, 15))
     list = UiKit.vertical(this)
     root.addView(list)
