@@ -62,6 +62,33 @@ class UnifiedMessagesActivity : Activity() {
       override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { render(s?.toString() ?: "") }
       override fun afterTextChanged(s: android.text.Editable?) {}
     })
+    layout.addView(title("Recent Google Messages notifications", 20f))
+    layout.addView(title("Optional local previews only — not complete RCS history.", 13f, Color.DKGRAY))
+    val bridgeStatus = title("", 13f, Color.DKGRAY)
+    layout.addView(bridgeStatus)
+    val liveList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+    layout.addView(liveList)
+    fun refreshBridge() {
+      val permitted = GoogleMessagesBridge.hasAccess(this)
+      bridgeStatus.text = if (permitted) "Notification access enabled" else "Notification access disabled"
+      liveList.removeAllViews()
+      if (permitted) {
+        val entries = BridgeInbox.snapshot()
+        if (entries.isEmpty()) liveList.addView(title("No accessible Google Messages notifications right now.", 14f, Color.DKGRAY))
+        entries.forEach { entry ->
+          liveList.addView(title(entry.sender + "\\n" + entry.preview, 15f))
+        }
+      }
+    }
+    layout.addView(Button(this).apply {
+      text = "Notification access settings"
+      setOnClickListener { startActivity(GoogleMessagesBridge.settingsIntent()) }
+    })
+    layout.addView(Button(this).apply {
+      text = "Refresh notification previews"
+      setOnClickListener { refreshBridge() }
+    })
+    refreshBridge()
     layout.addView(Button(this).apply {
       text = "Open real Google Messages"
       setOnClickListener {
@@ -74,7 +101,7 @@ class UnifiedMessagesActivity : Activity() {
     layout.addView(Button(this).apply { text = "← Home"; setOnClickListener { finish() } })
   }
 
-  private fun openLivingWorld() {
+  override fun onResume() { super.onResume() }\n\n  private fun openLivingWorld() {
     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://screen-to-same-studio.lovable.app")))
   }
 }
