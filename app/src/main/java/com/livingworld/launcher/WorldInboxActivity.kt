@@ -138,7 +138,16 @@ class WorldInboxActivity : Activity() {
         if (connection.responseCode != 200 || connection.contentLengthLong > 350000) {
           connection.disconnect(); return@execute
         }
-        val bytes = connection.inputStream.use { stream -> stream.readNBytes(350001) }
+        val bytes = connection.inputStream.use { stream ->
+          val output = java.io.ByteArrayOutputStream()
+          val buffer = ByteArray(8192)
+          while (output.size() <= 350000) {
+            val count = stream.read(buffer)
+            if (count < 0) break
+            output.write(buffer, 0, count)
+          }
+          output.toByteArray()
+        }
         connection.disconnect()
         if (bytes.size > 350000) return@execute
         val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
