@@ -37,3 +37,10 @@ git -C vendor/mmslib checkout ebfbb30d616631eca86f9cd257f627bdb636c1c2
 
 Include upstream LICENSE and NOTICE attribution in distribution packages.
 Do not release or choose this app as default SMS merely because the source module compiles.
+
+## Pinned source integration — verified
+- `scripts/fetch-mmslib.sh` checks out FossifyOrg/mmslib at `ebfbb30d616631eca86f9cd257f627bdb636c1c2` into the ignored `vendor/mmslib` directory.
+- Gradle includes the upstream `:library` source as local `:mmslib`; CI fetches the source before compiling.
+- GitHub Actions Android Build #106 succeeded with this source module.
+- `MmsTransport.kt` now uses the upstream `Settings`, `Message`, and `Transaction` image-sending API with system MMS transport. Its send gate is **false** until full MMS receive/download, provider writes, callbacks, and Samsung carrier validation are implemented.
+- This is a buildable MMS *foundation*, not a working default MMS app. Preserve Apache-2.0 copyright notices when distributing.
