@@ -1,6 +1,10 @@
 package com.livingworld.launcher
 
 import android.app.PendingIntent
+import android.app.Activity
+import android.content.ContentValues
+import android.provider.Telephony
+import android.telephony.SubscriptionManager
 import android.content.Context
 import android.content.Intent
 import android.telephony.SmsManager
@@ -31,14 +35,30 @@ object SmsTransport {
   }
 
   /**
-   * Never called by a shipped UI while SEND_ENABLED=false.
-   * Multipart APIs invoke sent callbacks per segment; the provider must persist
-   * successful outgoing messages and handle partial failures before enabling.
+   * Carrier-facing send implementation for later qualification testing.
+   * Disabled by SEND_ENABLED until default-app role, callbacks and MMS pass testing.
+   * Persist as an OUTBOX record first. Sent result handling must move to SENT/FAILED.
    */
   fun send(context: Context, address: String, body: String): Validation {
     val verdict = validate(context, address, body)
     if (verdict !is Validation.Ready) return verdict
-    // Intentionally no SmsManager dispatch yet: validation alone is not a working SMS engine.
-    return Validation.Blocked("Delivery/persistence pipeline not enabled")
+    val manager = SmsManager.getDefault()
+    val parts = manager.divideMessage(body)
+    if (parts.isEmpty()) return Validation.Blocked("No message parts to send")
+    val values = ContentValues().apply {
+      put(Telephony.Sms.ADDRESS, address)
+      put(Telephony.Sms.BODY, body)
+      put(Telephony.Sms.DATE, System.currentTimeMillis())
+      put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_OUTBOX)
+      put(Telephony.Sms.READ, 1)
+    }
+    // No send without a durable provider record: avoid silent loss.
+    val saved = try {
+      context.contentResolver.insert(Telephony.Sms.Outbox.CONTENT_URI, values)
+    } catch (_: Exception) { null }
+    if (saved == null) return Validation.Blocked("Could not save outgoing message")
+    // TODO: attach per-part SENT and DELIVERED PendingIntent callbacks with durable
+    // provider message IDs and mark failed/partial sends. No dispatch yet.
+    return Validation.Blocked("Saved in outbox, carrier dispatch not enabled")
   }
 }
