@@ -127,11 +127,12 @@ class WorldInboxActivity : Activity() {
     }
   }
   private fun loadPhoto(view: ImageView, url: String) {
-    val uri = Uri.parse(url)
+    val resolved = if (url.startsWith("/")) WorldBackend.ORIGIN + url else url
+    val uri = Uri.parse(resolved)
     if (uri.scheme != "https" || uri.host.isNullOrBlank()) return
     pictures.execute {
       try {
-        val connection = URL(url).openConnection() as HttpURLConnection
+        val connection = URL(resolved).openConnection() as HttpURLConnection
         connection.connectTimeout = 6000
         connection.readTimeout = 6000
         connection.instanceFollowRedirects = false
