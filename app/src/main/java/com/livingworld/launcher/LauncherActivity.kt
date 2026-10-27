@@ -35,6 +35,7 @@ class LauncherActivity : Activity() {
 
   private fun world() = startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://screen-to-same-studio.lovable.app")))
   private fun messages() = startActivity(Intent(this, UnifiedMessagesActivity::class.java))
+  private fun contacts() = startActivity(Intent(this, UnifiedContactsActivity::class.java))
   private fun launch(app: LauncherActivityInfo) {
     try { launcher.startMainActivity(app.componentName, Process.myUserHandle(), null, null) }
     catch (_: Exception) { Toast.makeText(this, "Unable to launch app", Toast.LENGTH_SHORT).show() }
@@ -130,12 +131,13 @@ class LauncherActivity : Activity() {
       "Phone" to findApp("Phone"),
       "Messages" to null,
       "All apps" to null,
-      "Contacts" to findApp("Contacts")
+      "Contacts" to null
     )
     root.addView(grid(dock) { key ->
       when (key) {
         "Messages" -> ({ messages() })
         "All apps" -> ({ drawer() })
+        "Contacts" -> ({ contacts() })
         else -> null
       }
     })
@@ -169,12 +171,13 @@ class LauncherActivity : Activity() {
     fun render(query: String) {
       holder.removeAllViews()
       val filtered = apps.filter { it.label.toString().contains(query, true) }
-      val all = listOf("Living World" to null, "Messages" to null) +
+      val all = listOf("Living World" to null, "Messages" to null, "Contacts" to null) +
         filtered.map { it.label.toString() to it }
       holder.addView(grid(all) { key ->
         when (key) {
           "Living World" -> ({ world() })
           "Messages" -> ({ messages() })
+          "Contacts" -> ({ contacts() })
           else -> null
         }
       })
