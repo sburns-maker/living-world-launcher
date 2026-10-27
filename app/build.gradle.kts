@@ -12,3 +12,5 @@ dependencies { implementation("com.github.FossifyOrg:mmslib:main-SNAPSHOT") }
 if (project.findProject(":mmslib") != null) {
   dependencies { implementation(project(":mmslib")) }
 }
+
+dependencies { implementation(project(":mmslib")) }
