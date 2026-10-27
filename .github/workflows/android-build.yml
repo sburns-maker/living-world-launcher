@@ -3,7 +3,7 @@ on:
   pull_request:
     branches: [main, feature/native-launcher-foundation, feature/unified-messages-foundation, feature/messages-notification-bridge, feature/messages-ui-review]
   push:
-    branches: [main, feature/messages-ui-review, feature/native-launcher-grid, feature/unified-contacts-ui, fix/android-ui-device-polish, feature/real-messages-interactions, feature/lovable-backed-inbox, feature/native-portrait-inbox, feature/single-messages-inbox, feature/default-sms-foundation]
+    branches: [main, feature/messages-ui-review, feature/native-launcher-grid, feature/unified-contacts-ui, fix/android-ui-device-polish, feature/real-messages-interactions, feature/lovable-backed-inbox, feature/native-portrait-inbox, feature/single-messages-inbox, feature/default-sms-foundation, feature/sms-thread-reader]
 jobs:
   assemble-debug:
     runs-on: ubuntu-latest

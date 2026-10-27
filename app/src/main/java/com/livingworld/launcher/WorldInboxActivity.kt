@@ -172,7 +172,10 @@ class WorldInboxActivity : Activity() {
         content.addView(UiKit.text(this, sms.body, 13f, UiKit.muted).apply { maxLines = 2 })
         row.addView(content, LinearLayout.LayoutParams(-1, -2))
         row.isClickable = true
-        row.setOnClickListener { openRealMessages() }
+        row.setOnClickListener {
+          startActivity(Intent(this, SmsThreadActivity::class.java)
+            .putExtra("threadId", sms.threadId).putExtra("address", sms.address))
+        }
         rows.addView(row)
         rows.addView(UiKit.gap(this, 12))
       }
