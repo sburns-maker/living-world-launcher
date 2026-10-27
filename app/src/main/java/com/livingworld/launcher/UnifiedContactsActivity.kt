@@ -47,7 +47,7 @@ class UnifiedContactsActivity : Activity() {
       if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
         requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 101)
       else load()
-    })
+    }
     root.addView(allowContactsButton)
     root.addView(UiKit.gap(this, 15))
     list = UiKit.vertical(this)
