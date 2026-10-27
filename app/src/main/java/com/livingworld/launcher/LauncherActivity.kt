@@ -62,8 +62,8 @@ class LauncherActivity : Activity() {
       setOnClickListener { action() }
     }
     val face = FrameLayout(this)
-    if (drawable != null) {
-      face.addView(ImageView(this).apply { setImageDrawable(drawable); scaleType = ImageView.ScaleType.FIT_CENTER },
+    if (drawable != null || name == "Messages") {
+      face.addView(ImageView(this).apply { setImageDrawable(if (name == "Messages") getDrawable(R.drawable.ic_messages) else drawable); scaleType = ImageView.ScaleType.FIT_CENTER },
         FrameLayout.LayoutParams(UiKit.dp(this, 52), UiKit.dp(this, 52), Gravity.CENTER))
     } else {
       val glyph = when (name) { "Messages" -> "●"; "Contacts" -> "●"; "All apps" -> "☷"; else -> name.take(1) }
