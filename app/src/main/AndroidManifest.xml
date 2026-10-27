@@ -5,6 +5,7 @@
   <!-- Used only if Android explicitly grants this app the default SMS role. -->
   <uses-permission android:name="android.permission.READ_SMS" />
   <uses-permission android:name="android.permission.SEND_SMS" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <queries><package android:name="com.google.android.apps.messaging"/><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent></queries>
   <application android:allowBackup="false" android:label="Living World Home" android:theme="@android:style/Theme.Material.Light.NoActionBar">
     <receiver android:name=".SmsSentResultReceiver" android:exported="false" />
