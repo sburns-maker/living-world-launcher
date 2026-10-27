@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Process
 import android.provider.Settings
+import android.view.WindowManager
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -65,7 +66,8 @@ class LauncherActivity : Activity() {
       face.addView(ImageView(this).apply { setImageDrawable(drawable); scaleType = ImageView.ScaleType.FIT_CENTER },
         FrameLayout.LayoutParams(UiKit.dp(this, 52), UiKit.dp(this, 52), Gravity.CENTER))
     } else {
-      val circle = label(name.take(1), 25f, true).apply {
+      val glyph = when (name) { "Messages" -> "✉"; "Contacts" -> "●"; "All apps" -> "☷"; else -> name.take(1) }
+      val circle = label(glyph, 25f, true).apply {
         gravity = Gravity.CENTER
         background = UiKit.surface(this@LauncherActivity, Color.rgb(112, 84, 193), 18)
       }
@@ -80,10 +82,13 @@ class LauncherActivity : Activity() {
     return tile
   }
   private fun screen(): LinearLayout {
+    window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS or WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
+    window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+    window.decorView.systemUiVisibility = 0
     val root = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
-      setPadding(UiKit.dp(this@LauncherActivity, 13), UiKit.dp(this@LauncherActivity, 16),
-        UiKit.dp(this@LauncherActivity, 13), UiKit.dp(this@LauncherActivity, 12))
+      setPadding(UiKit.dp(this@LauncherActivity, 13), UiKit.dp(this@LauncherActivity, 28),
+        UiKit.dp(this@LauncherActivity, 13), UiKit.dp(this@LauncherActivity, 22))
     }
     background(root)
     setContentView(root)
@@ -91,7 +96,7 @@ class LauncherActivity : Activity() {
     window.navigationBarColor = Color.rgb(28, 45, 78)
     return root
   }
-  private fun grid(items: List<Pair<String, LauncherActivityInfo?>>, customAction: (String) -> (() -> Unit)?): GridLayout {
+  private fun grid(items: List<Pair<String, LauncherActivityInfo?>>, customAction: (String) -> (() -> Unit)?, compact: Boolean = false): GridLayout {
     val grid = GridLayout(this).apply { columnCount = 4; alignmentMode = GridLayout.ALIGN_BOUNDS }
     val columns = 4
     val width = (resources.displayMetrics.widthPixels - UiKit.dp(this, 26)) / columns
@@ -100,7 +105,7 @@ class LauncherActivity : Activity() {
       val action = special ?: { item.second?.let { launch(it) }; Unit }
       val tile = icon(item.first, item.second?.getIcon(0), action)
       grid.addView(tile, GridLayout.LayoutParams(GridLayout.spec(index / columns), GridLayout.spec(index % columns)).apply {
-        this.width = width; height = UiKit.dp(this@LauncherActivity, 107)
+        this.width = width; height = UiKit.dp(this@LauncherActivity, if (compact) 94 else 107)
       })
     }
     return grid
@@ -119,13 +124,13 @@ class LauncherActivity : Activity() {
       "Camera" to findApp("Camera"),
       "Settings" to findApp("Settings")
     )
-    root.addView(grid(favorites) { key ->
+    root.addView(grid(favorites, { key ->
       when (key) {
         "Living World" -> ({ world() })
         "Settings" -> ({ startActivity(Intent(Settings.ACTION_SETTINGS)) })
         else -> null
       }
-    })
+    }))
     root.addView(View(this), LinearLayout.LayoutParams(1, 0, 0.15f))
     val dock = listOf(
       "Phone" to findApp("Phone"),
@@ -133,14 +138,14 @@ class LauncherActivity : Activity() {
       "All apps" to null,
       "Contacts" to null
     )
-    root.addView(grid(dock) { key ->
+    root.addView(grid(dock, { key ->
       when (key) {
         "Messages" -> ({ messages() })
         "All apps" -> ({ drawer() })
         "Contacts" -> ({ contacts() })
         else -> null
       }
-    })
+    }, compact = true))
     root.setOnTouchListener(object : View.OnTouchListener {
       private var down = 0f
       override fun onTouch(v: View, event: MotionEvent): Boolean {
@@ -173,14 +178,14 @@ class LauncherActivity : Activity() {
       val filtered = apps.filter { it.label.toString().contains(query, true) }
       val all = listOf("Living World" to null, "Messages" to null, "Contacts" to null) +
         filtered.map { it.label.toString() to it }
-      holder.addView(grid(all) { key ->
+      holder.addView(grid(all, { key ->
         when (key) {
           "Living World" -> ({ world() })
           "Messages" -> ({ messages() })
           "Contacts" -> ({ contacts() })
           else -> null
         }
-      })
+      }))
     }
     render("")
     search.addTextChangedListener(object : android.text.TextWatcher {

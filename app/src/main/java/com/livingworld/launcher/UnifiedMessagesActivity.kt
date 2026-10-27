@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
+import android.view.View
 import android.widget.*
 import android.view.Gravity
 
@@ -22,12 +23,15 @@ class UnifiedMessagesActivity : Activity() {
   )
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    window.statusBarColor = UiKit.bg
+    window.navigationBarColor = UiKit.bg
+    window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
     val content = UiKit.vertical(this, 20).apply { setBackgroundColor(UiKit.bg) }
     setContentView(ScrollView(this).apply { isFillViewport = true; addView(content) })
     content.addView(UiKit.clickable(this, "‹  Home") { finish() })
     content.addView(UiKit.gap(this, 24))
     content.addView(UiKit.text(this, "Messages", 32f, UiKit.ink, true))
-    content.addView(UiKit.text(this, "Everything in one place", 14f, UiKit.muted))
+
     content.addView(UiKit.gap(this, 20))
     val search = EditText(this).apply {
       hint = "Search conversations"; isSingleLine = true
@@ -36,7 +40,7 @@ class UnifiedMessagesActivity : Activity() {
     }
     content.addView(search)
     content.addView(UiKit.gap(this, 20))
-    content.addView(UiKit.text(this, "Living World", 16f, UiKit.lavender, true))
+    content.addView(UiKit.text(this, "Conversations", 16f, UiKit.ink, true))
     val aiRows = UiKit.vertical(this)
     content.addView(aiRows)
     fun render(query: String) {
@@ -65,7 +69,7 @@ class UnifiedMessagesActivity : Activity() {
       override fun afterTextChanged(s: android.text.Editable?) {}
     })
     content.addView(UiKit.gap(this, 24))
-    content.addView(UiKit.text(this, "Google Messages", 17f, UiKit.ink, true))
+    content.addView(UiKit.text(this, "Recent real messages", 17f, UiKit.ink, true))
     content.addView(UiKit.text(this, "Recent notification previews only — not full RCS history", 13f, UiKit.muted))
     content.addView(UiKit.gap(this, 12))
     status = UiKit.text(this, "", 13f, UiKit.muted)
