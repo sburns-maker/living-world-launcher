@@ -7,6 +7,7 @@
   <queries><package android:name="com.google.android.apps.messaging"/><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent></queries>
   <application android:allowBackup="false" android:label="Living World Home" android:theme="@android:style/Theme.Material.Light.NoActionBar">
     <service android:name=".GoogleMessagesBridge" android:label="Living World message previews" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true"><intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter></service>
+    <activity android:name=".SmsThreadActivity" android:exported="false" />
     <activity android:name=".WorldInboxActivity" android:exported="false" />
     <activity android:name=".UnifiedContactsActivity" android:exported="false" />
     <activity android:name=".UnifiedMessagesActivity" android:exported="false" />
