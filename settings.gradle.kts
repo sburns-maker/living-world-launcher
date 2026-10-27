@@ -9,7 +9,3 @@ if (mmsSource.isDirectory) {
   include(":mmslib")
   project(":mmslib").projectDir = mmsSource
 }
-
-// Apache-2.0 source module, pinned in the Android build workflow.
-include(":mmslib")
-project(":mmslib").projectDir = file("vendor/mmslib/library")
