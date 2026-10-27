@@ -3,6 +3,8 @@ package com.livingworld.launcher
 import android.app.Notification
 import android.content.ComponentName
 import android.content.Intent
+import android.app.PendingIntent
+import android.app.RemoteInput
 import android.os.Bundle
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
@@ -34,7 +36,8 @@ class GoogleMessagesBridge : NotificationListenerService() {
     val displayName = title?.toString()?.take(120)?.trim().orEmpty()
     val excerpt = preview?.toString()?.take(240)?.trim().orEmpty()
     if (displayName.isBlank() && excerpt.isBlank()) return
-    BridgeInbox.put(BridgeEntry(sbn.key, displayName.ifBlank { "Google Messages" }, excerpt, sbn.postTime))
+    val reply = n.actions?.firstOrNull { action -> action.remoteInputs?.isNotEmpty() == true }
+    BridgeInbox.put(BridgeEntry(sbn.key, displayName.ifBlank { "Google Messages" }, excerpt, sbn.postTime, n.contentIntent, reply))
   }
   companion object {
     const val GOOGLE_MESSAGES = "com.google.android.apps.messaging"
@@ -47,7 +50,10 @@ class GoogleMessagesBridge : NotificationListenerService() {
 }
 
 /** Ephemeral in-process state only. App death or listener disconnect clears this preview. */
-data class BridgeEntry(val notificationKey: String, val sender: String, val preview: String, val postedAt: Long)
+data class BridgeEntry(
+  val notificationKey: String, val sender: String, val preview: String, val postedAt: Long,
+  val openIntent: PendingIntent?, val replyAction: Notification.Action?
+)
 object BridgeInbox {
   private val entries = LinkedHashMap<String, BridgeEntry>()
   @Synchronized fun put(entry: BridgeEntry) {
@@ -57,4 +63,5 @@ object BridgeInbox {
   @Synchronized fun remove(key: String) { entries.remove(key) }
   @Synchronized fun clear() { entries.clear() }
   @Synchronized fun snapshot(): List<BridgeEntry> = entries.values.sortedByDescending { it.postedAt }
+  @Synchronized fun find(key: String): BridgeEntry? = entries[key]
 }
