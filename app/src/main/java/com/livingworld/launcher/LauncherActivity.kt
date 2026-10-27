@@ -45,6 +45,7 @@ class LauncherActivity : Activity() {
     v.addView(label(SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date()), 47f, true))
     v.addView(label("Living World", 26f, true))
     v.addView(label("Your fictional world and your real apps, one home screen.", 15f))
+    v.addView(action("Messages") { startActivity(Intent(this, UnifiedMessagesActivity::class.java)) })
     v.addView(action("Open Living World") { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://screen-to-same-studio.lovable.app"))) })
     v.addView(action("All apps  ↑") { drawer() })
     v.addView(action("Android home settings") { startActivity(Intent("android.settings.HOME_SETTINGS")) })
