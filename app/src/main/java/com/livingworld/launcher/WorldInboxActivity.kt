@@ -1,6 +1,9 @@
 package com.livingworld.launcher
 
 import android.app.Activity
+import android.app.PendingIntent
+import android.content.ComponentName
+import android.provider.Settings
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -30,6 +33,7 @@ class WorldInboxActivity : Activity() {
   private lateinit var rows: LinearLayout
   private lateinit var listPage: LinearLayout
   private var showingConversation = false
+  private var worldThreads = emptyList<Thread>()
   private val pictures = Executors.newFixedThreadPool(2)
   private val webBridge = object {
     @JavascriptInterface fun receiveInbox(json: String) {
@@ -62,11 +66,12 @@ class WorldInboxActivity : Activity() {
       if (showingConversation) showNative() else finish()
     })
     listPage = UiKit.vertical(this, 16).apply { setBackgroundColor(UiKit.bg) }
-    listPage.addView(UiKit.text(this, "Conversations", 28f, UiKit.ink, true))
+    listPage.addView(UiKit.text(this, "Messages", 28f, UiKit.ink, true))
     rows = UiKit.vertical(this)
     listPage.addView(rows)
     root.addView(listPage, LinearLayout.LayoutParams(-1, 0, 1f))
-    rows.addView(UiKit.text(this, "Connecting to Living World…", 14f, UiKit.muted))
+    rows.addView(UiKit.text(this, "Connecting to conversations…", 14f, UiKit.muted))
+    renderRealNotifications()
     val browser = WebView(this).apply {
       settings.javaScriptEnabled = true
       settings.domStorageEnabled = true
@@ -97,10 +102,10 @@ class WorldInboxActivity : Activity() {
     web?.loadUrl(WorldBackend.INBOX_URL)
   }
   private fun render(threads: List<Thread>) {
+    worldThreads = threads
     rows.removeAllViews()
     if (threads.isEmpty()) {
-      rows.addView(UiKit.text(this, "No conversations yet. Sign in below if needed.", 14f, UiKit.muted))
-      return
+      rows.addView(UiKit.text(this, "Sign in below to load conversations.", 14f, UiKit.muted))
     }
     for (t in threads) {
       val line = UiKit.horizontal(this)
@@ -121,10 +126,57 @@ class WorldInboxActivity : Activity() {
       rows.addView(line)
       rows.addView(UiKit.gap(this, 14))
     }
+    renderRealNotifications()
     if (!showingConversation) {
       listPage.visibility = View.VISIBLE
       web?.visibility = View.GONE
     }
+  }
+  override fun onResume() {
+    super.onResume()
+    if (::rows.isInitialized && !showingConversation) render(worldThreads)
+  }
+  private fun renderRealNotifications() {
+    val allowed = GoogleMessagesBridge.hasAccess(this)
+    val current = if (allowed) BridgeInbox.snapshot() else emptyList()
+    if (current.isNotEmpty()) {
+      rows.addView(UiKit.gap(this, 10))
+      current.forEach { item ->
+        val line = UiKit.horizontal(this)
+        val avatar = UiKit.text(this, item.sender.take(1), 20f, UiKit.ink, true).apply {
+          gravity = Gravity.CENTER
+          background = UiKit.surface(this@WorldInboxActivity, android.graphics.Color.rgb(228,238,249), 30)
+        }
+        line.addView(avatar, LinearLayout.LayoutParams(UiKit.dp(this, 52), UiKit.dp(this, 52)))
+        val detail = UiKit.vertical(this, 10)
+        detail.addView(UiKit.text(this, item.sender, 17f, UiKit.ink, true))
+        detail.addView(UiKit.text(this, item.preview, 13f, UiKit.muted).apply { maxLines = 2 })
+        line.addView(detail, LinearLayout.LayoutParams(0, -2, 1f))
+        line.isClickable = true
+        line.setOnClickListener {
+          try {
+            val destination = item.openIntent
+            if (destination != null) destination.send()
+            else openRealMessages()
+          } catch (_: PendingIntent.CanceledException) { openRealMessages() }
+        }
+        rows.addView(line)
+        rows.addView(UiKit.gap(this, 14))
+      }
+    }
+    rows.addView(UiKit.gap(this, 12))
+    if (!allowed) {
+      rows.addView(UiKit.clickable(this, "Allow message previews") {
+        startActivity(GoogleMessagesBridge.settingsIntent())
+      })
+    }
+    rows.addView(UiKit.clickable(this, "Open Google Messages") { openRealMessages() })
+  }
+  private fun openRealMessages() {
+    val intent = packageManager.getLaunchIntentForPackage(GoogleMessagesBridge.GOOGLE_MESSAGES)
+      ?: Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)
+    try { startActivity(intent) }
+    catch (_: Exception) { Toast.makeText(this, "Google Messages unavailable", Toast.LENGTH_SHORT).show() }
   }
   private fun loadPhoto(view: ImageView, url: String) {
     val resolved = if (url.startsWith("/")) WorldBackend.ORIGIN + url else url
