@@ -1,9 +1,9 @@
 name: Android build check
 on:
   pull_request:
-    branches: [main, feature/native-launcher-foundation, feature/unified-messages-foundation, feature/messages-notification-bridge]
+    branches: [main, feature/native-launcher-foundation, feature/unified-messages-foundation, feature/messages-notification-bridge, feature/messages-ui-review]
   push:
-    branches: [main, feature/messages-ui-review]
+    branches: [main, feature/messages-ui-review, feature/native-launcher-grid, feature/unified-contacts-ui]
 jobs:
   assemble-debug:
     runs-on: ubuntu-latest
