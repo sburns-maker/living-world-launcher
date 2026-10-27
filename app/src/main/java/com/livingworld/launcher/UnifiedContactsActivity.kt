@@ -98,7 +98,7 @@ class UnifiedContactsActivity : Activity() {
       val details = UiKit.vertical(this, 9)
       details.addView(UiKit.text(this, person.name, 17f, UiKit.ink, true))
       details.addView(UiKit.text(this,
-        if (person.fictional) "Living World contact" else (person.phone ?: "Android contact"),
+        if (person.fictional) "Mobile" else (person.phone ?: "Android contact"),
         13f, UiKit.muted))
       row.addView(details, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
       row.setOnClickListener { open(person) }
