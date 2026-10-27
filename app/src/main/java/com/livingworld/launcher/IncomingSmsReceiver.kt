@@ -31,7 +31,8 @@ class IncomingSmsReceiver : BroadcastReceiver() {
       put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_INBOX)
     }
     try {
-      context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)
+      val inserted = context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)
+      if (inserted != null) SmsNotification.incoming(context, address, body, null)
       // TODO: notify, deduplicate repeated deliveries, and reconcile carrier multipart status.
     } catch (e: SecurityException) {
       Log.e("IncomingSmsReceiver", "SMS provider rejected incoming message", e)
