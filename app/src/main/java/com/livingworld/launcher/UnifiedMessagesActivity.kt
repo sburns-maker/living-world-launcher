@@ -76,7 +76,7 @@ class UnifiedMessagesActivity : Activity() {
         val entries = BridgeInbox.snapshot()
         if (entries.isEmpty()) liveList.addView(title("No accessible Google Messages notifications right now.", 14f, Color.DKGRAY))
         entries.forEach { entry ->
-          liveList.addView(title(entry.sender + "\\n" + entry.preview, 15f))
+          liveList.addView(title(entry.sender + "\n" + entry.preview, 15f))
         }
       }
     }
