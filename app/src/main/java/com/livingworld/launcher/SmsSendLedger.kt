@@ -31,8 +31,9 @@ object SmsSendLedger {
     state.put("sent", seen)
     if (!success) state.put("failed", true)
     if (!p.edit().putString(key, state.toString()).commit()) return null
-    if (state.optBoolean("failed")) return false
-    return if (seen.length() == total) true else null
+    // Do not settle a multipart message until every part reports. A later
+    // successful callback must never overwrite a failed segment.
+    return if (seen.length() == total) !state.optBoolean("failed") else null
   }
 
   @Synchronized fun recordDelivery(context: Context, id: Long, part: Int, total: Int): Boolean {
