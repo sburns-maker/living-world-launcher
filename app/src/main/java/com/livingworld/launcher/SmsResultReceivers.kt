@@ -24,6 +24,19 @@ class SmsSentResultReceiver : BroadcastReceiver() {
     if (messageId <= 0 || part < 0 || total <= 0 || part >= total) return
     val final = SmsSendLedger.recordSent(context, messageId, part, total, resultCode == Activity.RESULT_OK)
     Log.i(TAG, "SMS segment result id=$messageId segment=$part/$total result=$resultCode final=$final")
+    if (final != null) {
+      val values = ContentValues().apply {
+        put(Telephony.Sms.TYPE,
+          if (final) Telephony.Sms.MESSAGE_TYPE_SENT else Telephony.Sms.MESSAGE_TYPE_FAILED)
+      }
+      try {
+        context.contentResolver.update(
+          android.content.ContentUris.withAppendedId(Telephony.Sms.CONTENT_URI, messageId),
+          values, null, null)
+      } catch (e: Exception) {
+        Log.e(TAG, "Unable to commit SMS send state", e)
+      }
+    }
     // TODO: persist each segment result to durable pending-send state.
     // Only transition OUTBOX to SENT after ALL segments succeeded;
     // a failure must transition to FAILED and retain a retry path.
