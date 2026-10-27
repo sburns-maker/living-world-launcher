@@ -117,7 +117,7 @@ class UnifiedContactsActivity : Activity() {
   private fun open(person: Person) {
     if (person.fictional) {
       // No fabricated phone numbers or external calls for fictional people.
-      startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://screen-to-same-studio.lovable.app")))
+      startActivity(Intent(this, WorldInboxActivity::class.java))
     } else if (person.id != null) {
       val uri = Uri.withAppendedPath(ContactsContract.Contacts.CONTENT_URI, person.id.toString())
       startActivity(Intent(Intent.ACTION_VIEW, uri))
