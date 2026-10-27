@@ -164,6 +164,19 @@ class WorldInboxActivity : Activity() {
         rows.addView(UiKit.gap(this, 14))
       }
     }
+    if (SmsRole.isDefault(this)) {
+      SmsHistory.recent(this).forEach { sms ->
+        val row = UiKit.horizontal(this)
+        val content = UiKit.vertical(this, 8)
+        content.addView(UiKit.text(this, sms.address.ifBlank { "Unknown number" }, 17f, UiKit.ink, sms.unread))
+        content.addView(UiKit.text(this, sms.body, 13f, UiKit.muted).apply { maxLines = 2 })
+        row.addView(content, LinearLayout.LayoutParams(-1, -2))
+        row.isClickable = true
+        row.setOnClickListener { openRealMessages() }
+        rows.addView(row)
+        rows.addView(UiKit.gap(this, 12))
+      }
+    }
     rows.addView(UiKit.gap(this, 12))
     if (!allowed) {
       rows.addView(UiKit.clickable(this, "Allow message previews") {
