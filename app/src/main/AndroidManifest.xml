@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <queries><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent></queries>
   <application android:allowBackup="false" android:label="Living World Home" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <activity android:name=".UnifiedMessagesActivity" android:exported="false" />
     <activity android:name=".LauncherActivity" android:exported="true" android:launchMode="singleTask">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.HOME"/><category android:name="android.intent.category.DEFAULT"/></intent-filter>
