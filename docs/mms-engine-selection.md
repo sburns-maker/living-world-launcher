@@ -19,3 +19,21 @@
 6. Record Apache-2.0 license and notices for mmslib; do not ingest GPL app files absent deliberate licensing decision.
 
 Current app remains notification-based for real messages and keeps Google Messages default. It is not a default SMS/MMS application. Do not toggle SEND_ENABLED until carrier tests.
+
+## Pinned source integration (current branch)
+
+Android CI checks out FossifyOrg/mmslib at commit `ebfbb30d616631eca86f9cd257f627bdb636c1c2`
+under `vendor/mmslib` and compiles `:mmslib` as a local Android library module.
+The library is **not** stored in our Git repository and the app's carrier-facing MMS
+send/receive paths are **not yet wired up**. Pinning prevents silently consuming
+unreviewed upstream commits.
+
+For local Android Studio work, run before importing Gradle:
+
+```bash
+git clone https://github.com/FossifyOrg/mmslib.git vendor/mmslib
+git -C vendor/mmslib checkout ebfbb30d616631eca86f9cd257f627bdb636c1c2
+```
+
+Include upstream LICENSE and NOTICE attribution in distribution packages.
+Do not release or choose this app as default SMS merely because the source module compiles.
