@@ -23,7 +23,7 @@ class LauncherActivity : Activity() {
   }
   private fun screen(): LinearLayout {
     val root = UiKit.vertical(this, 22).apply { setBackgroundColor(UiKit.bg) }
-    setContentView(ScrollView(this).apply { fillViewport = true; addView(root) })
+    setContentView(ScrollView(this).apply { isFillViewport = true; addView(root) })
     return root
   }
   private fun home() {
@@ -53,7 +53,7 @@ class LauncherActivity : Activity() {
     root.addView(UiKit.gap(this, 20))
     root.addView(UiKit.text(this, "All apps", 30f, UiKit.ink, true))
     val search = EditText(this).apply {
-      hint = "Search apps"; singleLine = true; setPadding(UiKit.dp(this@LauncherActivity, 12), 8, 8, 8)
+      hint = "Search apps"; isSingleLine = true; setPadding(UiKit.dp(this@LauncherActivity, 12), 8, 8, 8)
       background = UiKit.surface(this@LauncherActivity)
     }
     root.addView(search)
