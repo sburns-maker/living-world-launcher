@@ -23,14 +23,14 @@ class UnifiedMessagesActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     val content = UiKit.vertical(this, 20).apply { setBackgroundColor(UiKit.bg) }
-    setContentView(ScrollView(this).apply { fillViewport = true; addView(content) })
+    setContentView(ScrollView(this).apply { isFillViewport = true; addView(content) })
     content.addView(UiKit.clickable(this, "‹  Home") { finish() })
     content.addView(UiKit.gap(this, 24))
     content.addView(UiKit.text(this, "Messages", 32f, UiKit.ink, true))
     content.addView(UiKit.text(this, "Everything in one place", 14f, UiKit.muted))
     content.addView(UiKit.gap(this, 20))
     val search = EditText(this).apply {
-      hint = "Search conversations"; singleLine = true
+      hint = "Search conversations"; isSingleLine = true
       setPadding(UiKit.dp(this@UnifiedMessagesActivity, 15), 12, 12, 12)
       background = UiKit.surface(this@UnifiedMessagesActivity)
     }
