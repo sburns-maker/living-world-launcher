@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.database.Cursor
 import android.provider.Telephony
 import android.util.Log
 
