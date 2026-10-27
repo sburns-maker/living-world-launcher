@@ -8,3 +8,7 @@ android { namespace = "com.livingworld.launcher"; compileSdk = 35
 
 // JitPack builds the upstream Apache-2.0 Fossify MMS source.
 dependencies { implementation("com.github.FossifyOrg:mmslib:main-SNAPSHOT") }
+
+if (project.findProject(":mmslib") != null) {
+  dependencies { implementation(project(":mmslib")) }
+}
