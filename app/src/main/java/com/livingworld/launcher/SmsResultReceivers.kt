@@ -22,7 +22,8 @@ class SmsSentResultReceiver : BroadcastReceiver() {
     val part = intent.getIntExtra(EXTRA_PART, -1)
     val total = intent.getIntExtra(EXTRA_TOTAL, -1)
     if (messageId <= 0 || part < 0 || total <= 0 || part >= total) return
-    Log.i(TAG, "SMS segment result id=$messageId segment=$part/$total result=$resultCode")
+    val final = SmsSendLedger.recordSent(context, messageId, part, total, resultCode == Activity.RESULT_OK)
+    Log.i(TAG, "SMS segment result id=$messageId segment=$part/$total result=$resultCode final=$final")
     // TODO: persist each segment result to durable pending-send state.
     // Only transition OUTBOX to SENT after ALL segments succeeded;
     // a failure must transition to FAILED and retain a retry path.
@@ -41,7 +42,11 @@ class SmsDeliveryResultReceiver : BroadcastReceiver() {
     if (intent.action != ACTION_DELIVERED || !SmsRole.isDefault(context)) return
     val id = intent.getLongExtra(SmsSentResultReceiver.EXTRA_MESSAGE_ID, -1L)
     if (id < 0) return
-    Log.i("SmsDeliveryResult", "Carrier delivery receipt for message $id")
+    val part = intent.getIntExtra(SmsSentResultReceiver.EXTRA_PART, -1)
+    val total = intent.getIntExtra(SmsSentResultReceiver.EXTRA_TOTAL, -1)
+    if (part !in 0 until total) return
+    SmsSendLedger.recordDelivery(context, id, part, total)
+    Log.i("SmsDeliveryResult", "Carrier delivery receipt for message $id segment=$part")
     // TODO: correlate all delivery receipts with persisted message/segment identifiers.
   }
   companion object {
