@@ -3,57 +3,59 @@ package com.livingworld.launcher
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
-import android.provider.Telephony
-import android.view.Gravity
 import android.widget.*
+import android.view.Gravity
 
-/** First-pass unified inbox shell. No SMS permissions or private-message reads. */
+/** Native messages shell; sample AI threads + optional read-only notification previews. */
 class UnifiedMessagesActivity : Activity() {
-  private val purple = Color.rgb(121, 87, 202)
+  private var previews: LinearLayout? = null
+  private var status: TextView? = null
+  private val sample = listOf(
+    Pair("Riley", "Want to talk later?"),
+    Pair("Claire", "Catch you tomorrow!"),
+    Pair("Tess", "I was thinking about that."),
+    Pair("Maya", "Hey you 😊"),
+    Pair("Jordan", "See you soon."),
+    Pair("Ben", "What's new?")
+  )
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    val layout = LinearLayout(this).apply {
-      orientation = LinearLayout.VERTICAL
-      setPadding(22, 35, 22, 22)
-      setBackgroundColor(Color.rgb(249, 249, 252))
+    val content = UiKit.vertical(this, 20).apply { setBackgroundColor(UiKit.bg) }
+    setContentView(ScrollView(this).apply { isFillViewport = true; addView(content) })
+    content.addView(UiKit.clickable(this, "‹  Home") { finish() })
+    content.addView(UiKit.gap(this, 24))
+    content.addView(UiKit.text(this, "Messages", 32f, UiKit.ink, true))
+    content.addView(UiKit.text(this, "Everything in one place", 14f, UiKit.muted))
+    content.addView(UiKit.gap(this, 20))
+    val search = EditText(this).apply {
+      hint = "Search conversations"; isSingleLine = true
+      setPadding(UiKit.dp(this@UnifiedMessagesActivity, 15), 12, 12, 12)
+      background = UiKit.surface(this@UnifiedMessagesActivity)
     }
-    val scroll = ScrollView(this).apply { addView(layout) }
-    setContentView(scroll)
-    fun title(text: String, size: Float, tint: Int = Color.BLACK): TextView =
-      TextView(this).apply { this.text = text; textSize = size; setTextColor(tint); setPadding(6, 13, 6, 13) }
-    layout.addView(title("Messages", 32f))
-    layout.addView(title("Your conversations • real and fictional", 14f, Color.DKGRAY))
-    val search = EditText(this).apply { hint = "Search conversations"; singleLine = true }
-    layout.addView(search)
-    val list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    layout.addView(list)
-    data class Thread(val name: String, val preview: String, val fictional: Boolean)
-    // Example contacts only, not actual imported texts or contacts.
-    val examples = listOf(
-      Thread("Riley", "Example · Want to talk later?", true),
-      Thread("Claire", "Example · Catch you tomorrow!", true),
-      Thread("Tess", "Example · I was thinking about that.", true)
-    )
-    fun render(filter: String) {
-      list.removeAllViews()
-      examples.filter { it.name.contains(filter, true) }.forEach { t ->
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val dot = TextView(this).apply {
-          text = "●"; textSize = 23f
-          setTextColor(if (t.fictional) purple else Color.GRAY)
-          setPadding(8, 8, 18, 8)
+    content.addView(search)
+    content.addView(UiKit.gap(this, 20))
+    content.addView(UiKit.text(this, "Living World", 16f, UiKit.lavender, true))
+    val aiRows = UiKit.vertical(this)
+    content.addView(aiRows)
+    fun render(query: String) {
+      aiRows.removeAllViews()
+      sample.filter { it.first.contains(query, true) }.forEach { (name, preview) ->
+        val row = UiKit.horizontal(this)
+        val avatar = UiKit.text(this, name.take(1), 23f, UiKit.lavender, true).apply {
+          gravity = Gravity.CENTER
+          background = UiKit.surface(this@UnifiedMessagesActivity, Color.rgb(237,232,250), 42)
         }
-        row.addView(dot)
-        val button = Button(this).apply {
-          text = "${t.name}\n${t.preview}"
-          isAllCaps = false
-          setOnClickListener { openLivingWorld() }
-        }
-        row.addView(button, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        list.addView(row)
+        row.addView(avatar, LinearLayout.LayoutParams(UiKit.dp(this, 48), UiKit.dp(this, 48)))
+        val description = UiKit.vertical(this, 8)
+        description.addView(UiKit.text(this, name, 17f, UiKit.ink, true))
+        description.addView(UiKit.text(this, "Demo · $preview", 13f, UiKit.muted))
+        row.addView(description, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        row.setOnClickListener { openWorld() }
+        row.isClickable = true; row.isFocusable = true
+        aiRows.addView(row)
+        aiRows.addView(UiKit.gap(this, 10))
       }
     }
     render("")
@@ -62,46 +64,49 @@ class UnifiedMessagesActivity : Activity() {
       override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { render(s?.toString() ?: "") }
       override fun afterTextChanged(s: android.text.Editable?) {}
     })
-    layout.addView(title("Recent Google Messages notifications", 20f))
-    layout.addView(title("Optional local previews only — not complete RCS history.", 13f, Color.DKGRAY))
-    val bridgeStatus = title("", 13f, Color.DKGRAY)
-    layout.addView(bridgeStatus)
-    val liveList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    layout.addView(liveList)
-    fun refreshBridge() {
-      val permitted = GoogleMessagesBridge.hasAccess(this)
-      bridgeStatus.text = if (permitted) "Notification access enabled" else "Notification access disabled"
-      liveList.removeAllViews()
-      if (permitted) {
-        val entries = BridgeInbox.snapshot()
-        if (entries.isEmpty()) liveList.addView(title("No accessible Google Messages notifications right now.", 14f, Color.DKGRAY))
-        entries.forEach { entry ->
-          liveList.addView(title(entry.sender + "\\n" + entry.preview, 15f))
-        }
-      }
-    }
-    layout.addView(Button(this).apply {
-      text = "Notification access settings"
-      setOnClickListener { startActivity(GoogleMessagesBridge.settingsIntent()) }
+    content.addView(UiKit.gap(this, 24))
+    content.addView(UiKit.text(this, "Google Messages", 17f, UiKit.ink, true))
+    content.addView(UiKit.text(this, "Recent notification previews only — not full RCS history", 13f, UiKit.muted))
+    content.addView(UiKit.gap(this, 12))
+    status = UiKit.text(this, "", 13f, UiKit.muted)
+    content.addView(status)
+    previews = UiKit.vertical(this)
+    content.addView(previews)
+    content.addView(UiKit.clickable(this, "Refresh previews") { refresh() })
+    content.addView(UiKit.gap(this, 8))
+    content.addView(UiKit.clickable(this, "Notification access settings") {
+      startActivity(GoogleMessagesBridge.settingsIntent())
     })
-    layout.addView(Button(this).apply {
-      text = "Refresh notification previews"
-      setOnClickListener { refreshBridge() }
-    })
-    refreshBridge()
-    layout.addView(Button(this).apply {
-      text = "Open real Google Messages"
-      setOnClickListener {
-        val launch = packageManager.getLaunchIntentForPackage("com.google.android.apps.messaging")
-        if (launch != null) startActivity(launch)
-        else startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING))
-      }
-    })
-    layout.addView(title("Real SMS/MMS is NOT imported yet. This screen does not request SMS access, change your default texting app, or send texts.", 13f, Color.DKGRAY))
-    layout.addView(Button(this).apply { text = "← Home"; setOnClickListener { finish() } })
+    content.addView(UiKit.gap(this, 8))
+    content.addView(UiKit.clickable(this, "Open Google Messages  ↗") { openGoogleMessages() })
+    content.addView(UiKit.gap(this, 20))
+    content.addView(UiKit.text(this, "Google Messages remains your default SMS/RCS app. No real messages are sent, changed, or imported here.", 13f, UiKit.muted))
+    refresh()
   }
-
-  override fun onResume() { super.onResume() }\n\n  private fun openLivingWorld() {
+  override fun onResume() { super.onResume(); if (previews != null) refresh() }
+  private fun refresh() {
+    val allowed = GoogleMessagesBridge.hasAccess(this)
+    status?.text = if (allowed) "Notification preview access enabled" else "Notification previews off"
+    val root = previews ?: return
+    root.removeAllViews()
+    if (!allowed) return
+    val items = BridgeInbox.snapshot()
+    if (items.isEmpty()) root.addView(UiKit.text(this, "No active Google Messages notifications", 14f, UiKit.muted))
+    items.forEach { item ->
+      val card = UiKit.vertical(this, 12).apply { background = UiKit.surface(this@UnifiedMessagesActivity) }
+      card.addView(UiKit.text(this, item.sender, 15f, UiKit.ink, true))
+      card.addView(UiKit.text(this, item.preview, 13f, UiKit.muted))
+      root.addView(card)
+      root.addView(UiKit.gap(this, 8))
+    }
+  }
+  private fun openGoogleMessages() {
+    val intent = packageManager.getLaunchIntentForPackage(GoogleMessagesBridge.GOOGLE_MESSAGES)
+      ?: Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)
+    try { startActivity(intent) }
+    catch (_: Exception) { Toast.makeText(this, "Google Messages unavailable", Toast.LENGTH_SHORT).show() }
+  }
+  private fun openWorld() {
     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://screen-to-same-studio.lovable.app")))
   }
 }
