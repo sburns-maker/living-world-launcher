@@ -40,8 +40,12 @@ object SmsTransport {
   fun send(context: Context, address: String, body: String): Validation {
     val verdict = validate(context, address, body)
     if (verdict !is Validation.Ready) return verdict
-    @Suppress("DEPRECATION")
-    val manager = SmsManager.getDefault()
+    val subscription = android.telephony.SubscriptionManager.getDefaultSmsSubscriptionId()
+    if (subscription == android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID)
+      return Validation.Blocked("Choose a default SMS SIM before sending")
+    val manager = context.getSystemService(SmsManager::class.java)
+      ?.createForSubscriptionId(subscription)
+      ?: return Validation.Blocked("SMS service unavailable")
     val parts = manager.divideMessage(body)
     if (parts.isEmpty()) return Validation.Blocked("No message parts to send")
     val values = ContentValues().apply {
