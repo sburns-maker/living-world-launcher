@@ -16,14 +16,6 @@ import android.view.Gravity
 class UnifiedMessagesActivity : Activity() {
   private var previews: LinearLayout? = null
   private var status: TextView? = null
-  private val sample = listOf(
-    Pair("Riley", "Want to talk later?"),
-    Pair("Claire", "Catch you tomorrow!"),
-    Pair("Tess", "I was thinking about that."),
-    Pair("Maya", "Hey you 😊"),
-    Pair("Jordan", "See you soon."),
-    Pair("Ben", "What's new?")
-  )
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     window.statusBarColor = UiKit.bg
@@ -36,41 +28,13 @@ class UnifiedMessagesActivity : Activity() {
     content.addView(UiKit.text(this, "Messages", 32f, UiKit.ink, true))
 
     content.addView(UiKit.gap(this, 20))
-    val search = EditText(this).apply {
-      hint = "Search conversations"; isSingleLine = true
-      setPadding(UiKit.dp(this@UnifiedMessagesActivity, 15), 12, 12, 12)
-      background = UiKit.surface(this@UnifiedMessagesActivity)
+    val worldCard = UiKit.vertical(this, 16).apply {
+      background = UiKit.surface(this@UnifiedMessagesActivity, Color.rgb(239, 234, 252))
     }
-    content.addView(search)
-    content.addView(UiKit.gap(this, 20))
-    content.addView(UiKit.text(this, "Conversations", 16f, UiKit.ink, true))
-    val aiRows = UiKit.vertical(this)
-    content.addView(aiRows)
-    fun render(query: String) {
-      aiRows.removeAllViews()
-      sample.filter { it.first.contains(query, true) }.forEach { (name, preview) ->
-        val row = UiKit.horizontal(this)
-        val avatar = UiKit.text(this, name.take(1), 23f, UiKit.lavender, true).apply {
-          gravity = Gravity.CENTER
-          background = UiKit.surface(this@UnifiedMessagesActivity, Color.rgb(237,232,250), 42)
-        }
-        row.addView(avatar, LinearLayout.LayoutParams(UiKit.dp(this, 48), UiKit.dp(this, 48)))
-        val description = UiKit.vertical(this, 8)
-        description.addView(UiKit.text(this, name, 17f, UiKit.ink, true))
-        description.addView(UiKit.text(this, "Demo · $preview", 13f, UiKit.muted))
-        row.addView(description, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-        row.setOnClickListener { openWorld() }
-        row.isClickable = true; row.isFocusable = true
-        aiRows.addView(row)
-        aiRows.addView(UiKit.gap(this, 10))
-      }
-    }
-    render("")
-    search.addTextChangedListener(object : android.text.TextWatcher {
-      override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-      override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) { render(s?.toString() ?: "") }
-      override fun afterTextChanged(s: android.text.Editable?) {}
-    })
+    worldCard.addView(UiKit.text(this, "Conversations", 21f, UiKit.ink, true))
+    worldCard.addView(UiKit.text(this, "Your current chats, photos and replies", 14f, UiKit.muted))
+    worldCard.addView(UiKit.clickable(this, "Open conversations  ›") { openWorld() })
+    content.addView(worldCard)
     content.addView(UiKit.gap(this, 24))
     content.addView(UiKit.text(this, "Recent real messages", 17f, UiKit.ink, true))
     content.addView(UiKit.text(this, "Recent notification previews only — not full RCS history", 13f, UiKit.muted))
