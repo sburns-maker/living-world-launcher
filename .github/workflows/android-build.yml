@@ -34,6 +34,8 @@ jobs:
           yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses > /dev/null || true
       - name: Install Android 35 platform and build tools
         run: '"$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-35" "build-tools;35.0.0"'
+      - name: Fetch pinned Apache-2.0 MMS source
+        run: bash scripts/fetch-mmslib.sh
       - name: Compile debug APK
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
