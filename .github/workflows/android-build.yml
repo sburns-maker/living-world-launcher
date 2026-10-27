@@ -36,11 +36,6 @@ jobs:
         run: '"$SDKMANAGER" --sdk_root="$ANDROID_HOME" "platforms;android-35" "build-tools;35.0.0"'
       - name: Fetch pinned Apache-2.0 MMS source
         run: bash scripts/fetch-mmslib.sh
-      - name: Fetch pinned Apache-2.0 MMS source
-        run: |
-          git clone --no-checkout https://github.com/FossifyOrg/mmslib.git vendor/mmslib
-          git -C vendor/mmslib checkout ebfbb30d616631eca86f9cd257f627bdb636c1c2
-          test -f vendor/mmslib/library/build.gradle.kts
       - name: Compile debug APK
         run: gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
