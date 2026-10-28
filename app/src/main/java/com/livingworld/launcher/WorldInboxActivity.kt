@@ -118,6 +118,38 @@ class WorldInboxActivity : Activity() {
     conversationScroll.addView(rows)
     listPage.addView(conversationScroll, LinearLayout.LayoutParams(-1, 0, 1f))
     root.addView(listPage, LinearLayout.LayoutParams(-1, 0, 1f))
+    chatPage = UiKit.vertical(this, 8).apply { visibility = View.GONE }
+    val chatHeader = UiKit.horizontal(this)
+    chatHeader.addView(UiKit.clickable(this, "‹") { showNative() })
+    val title = UiKit.text(this, "Conversation", 19f, UiKit.ink, true)
+    title.tag = "chat-title"
+    chatHeader.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+    chatHeader.addView(UiKit.clickable(this, "⋯") {
+      selectedWorldThread?.let { thread ->
+        showBrowser(WorldBackend.ORIGIN + "/chat/" + thread.id)
+      }
+    })
+    chatPage.addView(chatHeader)
+    aiStatus = UiKit.text(this, "Loading AI conversation…", 12f, UiKit.muted)
+    chatPage.addView(aiStatus)
+    chatScroll = ScrollView(this).apply { isFillViewport = true }
+    chatMessages = UiKit.vertical(this, 10)
+    chatScroll.addView(chatMessages)
+    chatPage.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+    val composerBar = UiKit.horizontal(this)
+    aiComposer = EditText(this).apply {
+      hint = "Message…"
+      minLines = 1
+      maxLines = 5
+      setSingleLine(false)
+      setPadding(UiKit.dp(this@WorldInboxActivity, 14), UiKit.dp(this@WorldInboxActivity, 9),
+        UiKit.dp(this@WorldInboxActivity, 14), UiKit.dp(this@WorldInboxActivity, 9))
+      background = UiKit.surface(this@WorldInboxActivity)
+    }
+    composerBar.addView(aiComposer, LinearLayout.LayoutParams(0, -2, 1f))
+    composerBar.addView(UiKit.clickable(this, "Send") { sendAiText() })
+    chatPage.addView(composerBar)
+    root.addView(chatPage, LinearLayout.LayoutParams(-1, 0, 1f))
     rows.addView(UiKit.text(this, "Connecting to conversations…", 14f, UiKit.muted))
     renderRealNotifications()
     val browser = WebView(this).apply {
