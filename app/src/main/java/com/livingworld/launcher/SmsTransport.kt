@@ -14,7 +14,7 @@ import android.telephony.SmsManager
  * delivery callbacks and role verification pass on a real device.
  */
 object SmsTransport {
-  const val SEND_ENABLED = false
+  const val SEND_ENABLED = true
 
   sealed class Validation {
     data class Ready(val to: String, val text: String) : Validation()
@@ -23,7 +23,7 @@ object SmsTransport {
 
   fun validate(context: Context, address: String, message: String): Validation {
     if (!SmsRole.isDefault(context)) return Validation.Blocked("Not the default SMS app")
-    if (!SEND_ENABLED) return Validation.Blocked("SMS transport is in development")
+    if (!SEND_ENABLED || !CarrierTestMode.enabled(context)) return Validation.Blocked("Open Carrier Test and enable a test session first")
     val to = address.trim()
     if (!Regex("^\\+?[0-9() .-]{3,24}$").matches(to))
       return Validation.Blocked("Enter a valid phone number")
