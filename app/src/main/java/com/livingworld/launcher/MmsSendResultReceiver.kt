@@ -36,6 +36,12 @@ object MmsSendLedger {
     if (!TOKEN.matches(token)) return
     val prefs = preferences(context)
     val state = JSONObject(prefs.getString(token, null) ?: return)
+    val previous = state.optString("status")
+    // Carrier callback may complete before the submit call returns.
+    // A late SUBMITTED update must not overwrite the terminal result.
+    if ((previous == "SENT_TO_CARRIER" || previous == "FAILED" ||
+         previous == "REQUEST_FAILED") &&
+        (status == "SUBMITTED_TO_ANDROID" || status == "SUBMITTING")) return
     state.put("status", status)
     if (resultCode != null) state.put("code", resultCode)
     if (httpStatus != null) state.put("http", httpStatus)
