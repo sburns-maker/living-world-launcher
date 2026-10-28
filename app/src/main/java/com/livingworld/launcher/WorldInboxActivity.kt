@@ -14,6 +14,8 @@ import android.widget.FrameLayout
 import org.json.JSONObject
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.webkit.JavascriptInterface
@@ -105,7 +107,7 @@ class WorldInboxActivity : Activity() {
     window.navigationBarColor = UiKit.bg
     window.decorView.systemUiVisibility =
       View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
-    val root = UiKit.vertical(this)
+    val root = UiKit.vertical(this).apply { fitsSystemWindows = true }
     setContentView(root)
     root.addView(UiKit.clickable(this, "‹  Messages") {
       if (showingConversation) showNative() else finish()
@@ -171,6 +173,14 @@ class WorldInboxActivity : Activity() {
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
           val uri = request?.url ?: return false
           if (WorldBackend.isAllowed(uri.toString())) return false
+          if (uri.host == "studio.lovable.app") {
+            runOnUiThread {
+              Toast.makeText(this@WorldInboxActivity,
+                "Lovable preview cannot sync with the installed app. Publish the website changes first.",
+                Toast.LENGTH_LONG).show()
+            }
+            return true
+          }
           if (uri.scheme != "https") return true
           return try {
             startActivity(Intent(Intent.ACTION_VIEW, uri)); true
@@ -181,6 +191,24 @@ class WorldInboxActivity : Activity() {
           if (!signingIn || selectedWorldThread != null ||
               !WorldBackend.isAllowed(url.orEmpty())) return
           val path = Uri.parse(url).path.orEmpty()
+          if (path == "/inbox") {
+            Handler(Looper.getMainLooper()).postDelayed({
+              if (!isFinishing && !isDestroyed && !worldAuthenticated &&
+                  WorldBackend.isAllowed(view?.url.orEmpty())) {
+                view?.evaluateJavascript(
+                  "(function(){return Boolean(window.__livingWorldInboxBridgeReady);})()"
+                ) { ready ->
+                  if (!worldAuthenticated && !isFinishing && !isDestroyed) {
+                    bridgeDiagnostic = if (ready == "true")
+                      "Website bridge detected; waiting for authenticated conversations. Sign in inside this app."
+                    else
+                      "No AI sync bridge detected on the published website. Publish the latest Living World changes in Lovable, then retry."
+                    if (!showingConversation) render(worldThreads)
+                  }
+                }
+              }
+            }, 7000)
+          }
           if (path != "/auth" && path != "/login" && path != "/inbox" &&
               !path.startsWith("/chat/")) {
             view?.post { if (signingIn) view.loadUrl(WorldBackend.INBOX_URL) }
