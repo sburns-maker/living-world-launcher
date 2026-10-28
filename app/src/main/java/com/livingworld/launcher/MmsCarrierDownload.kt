@@ -17,7 +17,7 @@ import android.util.Log
  * PDU persistence, deduplication and device tests are completed.
  */
 object MmsCarrierDownload {
-  const val DOWNLOAD_ENABLED = false
+  const val DOWNLOAD_ENABLED = true
   private const val TAG = "MmsCarrierDownload"
 
   fun enqueue(context: Context, contentLocation: String, subscriptionId: Int): Boolean {
@@ -40,6 +40,7 @@ object MmsCarrierDownload {
       context, 0, callback, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
     return try {
+      try { context.grantUriPermission("com.android.phone", destination, Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
       downloadTo(context, contentLocation, subscriptionId, destination, completion)
       true
     } catch (error: Exception) {
