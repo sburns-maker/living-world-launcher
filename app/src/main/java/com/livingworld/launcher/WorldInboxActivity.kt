@@ -47,6 +47,8 @@ class WorldInboxActivity : Activity() {
   private var selectedWorldThread: Thread? = null
   private var signingIn = false
   private var worldAuthenticated = false
+  private var bridgeDiagnostic = "Sign in inside the app to sync AI conversations."
+  private var webBridgeLoaded = false
   private var showingConversation = false
   private var worldThreads = emptyList<Thread>()
   private val pictures = Executors.newFixedThreadPool(2)
@@ -68,6 +70,8 @@ class WorldInboxActivity : Activity() {
       } catch (_: Exception) { return }
       runOnUiThread {
         worldAuthenticated = true
+        webBridgeLoaded = true
+        bridgeDiagnostic = "Connected — ${parsed.size} AI conversations synchronized."
         if (signingIn) showNative()
         render(parsed)
       }
@@ -200,10 +204,12 @@ class WorldInboxActivity : Activity() {
     listPage.visibility = View.VISIBLE
     web?.visibility = View.GONE
     web?.loadUrl(WorldBackend.INBOX_URL)
+    render(worldThreads)
   }
   private fun showBrowser(url: String) {
     showingConversation = true
     signingIn = true
+    bridgeDiagnostic = "Waiting for the published Living World website to sync…"
     listPage.visibility = View.GONE
     chatPage.visibility = View.GONE
     web?.visibility = View.VISIBLE
@@ -291,11 +297,20 @@ class WorldInboxActivity : Activity() {
   private fun render(threads: List<Thread>) {
     worldThreads = threads
     rows.removeAllViews()
-    if (threads.isEmpty()) {
-      rows.addView(UiKit.clickable(this,
-        if (worldAuthenticated) "No AI conversations yet" else "Connect Living World AI conversations") {
-        if (!worldAuthenticated) showBrowser(WorldBackend.INBOX_URL)
+    if (!worldAuthenticated) {
+      rows.addView(UiKit.text(this,
+        "AI conversations aren't connected to this installation yet.", 14f, UiKit.muted))
+      rows.addView(UiKit.text(this, bridgeDiagnostic, 12f, UiKit.muted))
+      rows.addView(UiKit.clickable(this, "Sign in inside Living World") {
+        showBrowser(WorldBackend.INBOX_URL)
       })
+      rows.addView(UiKit.clickable(this, "Retry AI conversation sync") {
+        bridgeDiagnostic = "Checking the published Living World inbox…"
+        web?.loadUrl(WorldBackend.INBOX_URL)
+        render(worldThreads)
+      })
+    } else if (threads.isEmpty()) {
+      rows.addView(UiKit.text(this, "Connected — no AI conversations found.", 14f, UiKit.muted))
     }
     for (t in threads) {
       val line = UiKit.horizontal(this)
