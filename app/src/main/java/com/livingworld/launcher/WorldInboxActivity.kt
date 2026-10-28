@@ -189,6 +189,9 @@ class WorldInboxActivity : Activity() {
         startActivity(GoogleMessagesBridge.settingsIntent())
       })
     }
+    rows.addView(UiKit.clickable(this, "Carrier SMS/MMS test setup") {
+      startActivity(Intent(this, CarrierTestActivity::class.java))
+    })
     rows.addView(UiKit.clickable(this, "Open Google Messages") { openRealMessages() })
   }
   private fun openRealMessages() {
