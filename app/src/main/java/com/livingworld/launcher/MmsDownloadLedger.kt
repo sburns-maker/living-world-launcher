@@ -21,6 +21,12 @@ object MmsDownloadLedger {
     return bytes.joinToString("") { "%02x".format(it) }
   }
 
+  @Synchronized fun isComplete(context: Context, subscription: Int, location: String): Boolean {
+    val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val key = key(subscription, location)
+    return preferences.getString(key, null) == COMPLETE
+  }
+
   @Synchronized fun begin(context: Context, subscription: Int, location: String): Boolean {
     val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     val key = key(subscription, location)
