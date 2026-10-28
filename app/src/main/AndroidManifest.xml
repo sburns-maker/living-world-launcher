@@ -54,6 +54,15 @@
     </activity>
     <activity android:name=".CarrierTestActivity" android:exported="false" />
     <activity android:name=".SmsThreadActivity" android:exported="false" />
+    <activity android:name=".WorldOAuthCallbackActivity"
+      android:exported="true" android:noHistory="true">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="livingworld" android:host="auth" />
+      </intent-filter>
+    </activity>
     <activity android:name=".WorldInboxActivity" android:exported="false" />
     <activity android:name=".UnifiedContactsActivity" android:exported="false" />
     <activity android:name=".UnifiedMessagesActivity" android:exported="false" />
