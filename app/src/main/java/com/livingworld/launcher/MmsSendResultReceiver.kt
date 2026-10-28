@@ -67,7 +67,7 @@ object MmsSendLedger {
  */
 class MmsSentResultReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
-    if (intent.action != ACTION_SENT || !SmsRole.isDefault(context)) return
+    if (intent.action != ACTION_SENT) return
     val token = intent.getStringExtra(EXTRA_TOKEN) ?: return
     val result = resultCode
     val http = intent.getIntExtra(SmsManager.EXTRA_MMS_HTTP_STATUS, -1)
