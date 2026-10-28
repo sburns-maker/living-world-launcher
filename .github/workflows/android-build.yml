@@ -73,6 +73,17 @@ jobs:
           fi
       - name: Compile debug APK
         run: gradle --no-daemon :app:assembleDebug
+      - name: Verify permanent APK signature
+        if: env.LIVING_WORLD_TEST_SIGNING_DIR != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          echo "Android test signature:" >> "$GITHUB_STEP_SUMMARY"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" | grep 'Signer #1 certificate SHA-256 digest' >> "$GITHUB_STEP_SUMMARY"
+          sha256sum "$APK" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         if: env.LIVING_WORLD_TEST_SIGNING_DIR != ''
         with:
