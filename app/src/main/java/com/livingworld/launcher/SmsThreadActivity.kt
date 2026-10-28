@@ -1,6 +1,8 @@
 package com.livingworld.launcher
 
 import android.app.Activity
+import android.graphics.BitmapFactory
+import android.widget.ImageView
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
