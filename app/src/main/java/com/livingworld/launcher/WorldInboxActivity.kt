@@ -336,7 +336,8 @@ class WorldInboxActivity : Activity() {
       }
     }
     if (SmsRole.isDefault(this)) {
-      val contacts = ContactNameResolver.snapshot(this)
+      val profiles = ContactNameResolver.snapshotProfiles(this)
+      val contacts = profiles.mapValues { it.value.name }
       if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
         rows.addView(UiKit.clickable(this, "Show saved contact names") {
           requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 210)
@@ -345,10 +346,16 @@ class WorldInboxActivity : Activity() {
       }
       SmsHistory.recent(this).forEach { sms ->
         val row = UiKit.horizontal(this)
-        val content = UiKit.vertical(this, 8)
+        val displayName = ContactNameResolver.display(sms.address, contacts)
+        val avatar = localContactAvatar(displayName,
+          ContactNameResolver.photo(sms.address, profiles))
+        row.addView(avatar, LinearLayout.LayoutParams(UiKit.dp(this, 48), UiKit.dp(this, 48)))
+        val content = UiKit.vertical(this, 8).apply {
+          setPadding(UiKit.dp(this@WorldInboxActivity, 12), 0, 0, 0)
+        }
         content.addView(UiKit.text(this, ContactNameResolver.display(sms.address, contacts), 17f, UiKit.ink, sms.unread))
         content.addView(UiKit.text(this, sms.body, 13f, UiKit.muted).apply { maxLines = 2 })
-        row.addView(content, LinearLayout.LayoutParams(-1, -2))
+        row.addView(content, LinearLayout.LayoutParams(0, -2, 1f))
         row.isClickable = true
         row.setOnClickListener {
           startActivity(Intent(this, SmsThreadActivity::class.java)
@@ -391,6 +398,37 @@ class WorldInboxActivity : Activity() {
     try { startActivity(intent) }
     catch (_: Exception) { Toast.makeText(this, "Google Messages unavailable", Toast.LENGTH_SHORT).show() }
   }
+  private fun localContactAvatar(name: String, uri: Uri?): FrameLayout {
+    val avatar = FrameLayout(this).apply {
+      background = UiKit.surface(this@WorldInboxActivity,
+        Color.rgb(230,240,251), 48)
+      clipToOutline = true
+    }
+    val initial = UiKit.text(this, name.trim().take(1).uppercase().ifBlank { "?" },
+      21f, UiKit.ink, true).apply { gravity = Gravity.CENTER }
+    avatar.addView(initial, FrameLayout.LayoutParams(-1,-1))
+    if (uri?.scheme == "content") {
+      pictures.execute {
+        val bitmap = try {
+          contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null,
+              BitmapFactory.Options().apply { inSampleSize = 2 })
+          }
+        } catch (_: Exception) { null }
+        if (bitmap != null) runOnUiThread {
+          if (!isFinishing && !isDestroyed && avatar.childCount == 1) {
+            val image = ImageView(this).apply {
+              scaleType = ImageView.ScaleType.CENTER_CROP
+              setImageBitmap(bitmap)
+            }
+            avatar.addView(image, FrameLayout.LayoutParams(-1, -1))
+          }
+        }
+      }
+    }
+    return avatar
+  }
+
   private fun loadPhoto(view: ImageView, url: String) {
     val resolved = if (url.startsWith("/")) WorldBackend.ORIGIN + url else url
     val uri = Uri.parse(resolved)
