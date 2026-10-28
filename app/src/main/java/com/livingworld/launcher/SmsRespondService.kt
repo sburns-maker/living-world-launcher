@@ -11,7 +11,7 @@ import android.util.Log
 @Suppress("DEPRECATION")
 class SmsRespondService : IntentService("SmsRespondService") {
   override fun onHandleIntent(intent: Intent?) {
-    if (intent?.action != Intent.ACTION_RESPOND_VIA_MESSAGE) return
+    if (intent?.action != "android.intent.action.RESPOND_VIA_MESSAGE") return
     if (!CarrierTestMode.enabled(this)) {
       Log.w("SmsRespondService", "Call response blocked outside test session")
       return
