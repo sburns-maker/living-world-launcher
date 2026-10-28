@@ -55,7 +55,7 @@ object ContactNameResolver {
     // MMS group conversations may list several phone numbers.
     if (',' in address || ';' in address) {
       return address.split(',', ';').map { raw ->
-        names[key(raw.trim())] ?: raw.trim()
+        key(raw.trim())?.let { names[it] } ?: raw.trim()
       }.joinToString(", ")
     }
     return key(address)?.let(names::get) ?: address
