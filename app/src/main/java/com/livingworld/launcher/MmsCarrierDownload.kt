@@ -1,6 +1,8 @@
 package com.livingworld.launcher
 
 import android.app.PendingIntent
+import android.content.Intent
+import java.util.UUID
 import android.content.Context
 import android.net.Uri
 import android.telephony.SmsManager
@@ -24,10 +26,23 @@ object MmsCarrierDownload {
       return false
     if (!contentLocation.startsWith("http://", true) &&
         !contentLocation.startsWith("https://", true)) return false
-    // A real download requires a writable content:// destination controlled by
-    // this app. Never substitute an insecure file:// URI or a random provider.
-    Log.w(TAG, "MMS download destination and completion pipeline not yet enabled")
-    return false
+    val token = UUID.randomUUID().toString()
+    val destination = MmsDownloadProvider.destination(context, token)
+    val callback = Intent(context, MmsDownloadResultReceiver::class.java)
+      .setAction(MmsDownloadResultReceiver.ACTION_RESULT)
+      .setData(destination)
+      .putExtra(MmsDownloadResultReceiver.EXTRA_TOKEN, token)
+      .putExtra(MmsDownloadResultReceiver.EXTRA_SUBSCRIPTION, subscriptionId)
+    val completion = PendingIntent.getBroadcast(
+      context, 0, callback, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+    return try {
+      downloadTo(context, contentLocation, subscriptionId, destination, completion)
+      true
+    } catch (error: Exception) {
+      Log.e(TAG, "Unable to request carrier MMS download", error)
+      false
+    }
   }
 
   /**
