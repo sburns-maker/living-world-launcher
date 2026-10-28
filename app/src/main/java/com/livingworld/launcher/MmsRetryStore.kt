@@ -19,7 +19,7 @@ object MmsRetryStore {
     .digest("$subscription:$location".toByteArray()).joinToString("") { "%02x".format(it) }
 
   @Synchronized fun completed(context: Context, subscription: Int, location: String) {
-    context.getSharedPreferences(FILE, 0).edit().remove(id(subscription, location)).commit()
+    context.getSharedPreferences(FILE, 0).edit().remove(id(subscription, location) + ".attempts").remove(id(subscription, location) + ".url").remove(id(subscription, location) + ".sub").commit()
   }
 
   @Synchronized fun failure(context: Context, subscription: Int, location: String) {
