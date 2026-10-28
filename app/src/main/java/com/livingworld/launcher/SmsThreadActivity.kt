@@ -35,7 +35,9 @@ class SmsThreadActivity : Activity() {
     val root = UiKit.vertical(this, 12).apply { setBackgroundColor(UiKit.bg) }
     setContentView(root)
     root.addView(UiKit.clickable(this, "‹  Messages") { finish() })
-    root.addView(UiKit.text(this, intent.getStringExtra("address") ?: "Conversation", 23f, UiKit.ink, true))
+    val address = intent.getStringExtra("address").orEmpty()
+    val title = ContactNameResolver.display(address, ContactNameResolver.snapshot(this))
+    root.addView(UiKit.text(this, title, 23f, UiKit.ink, true))
     val scroll = ScrollView(this)
     val stack = UiKit.vertical(this, 8)
     scroll.addView(stack)
