@@ -31,6 +31,7 @@
     </receiver>
     <receiver android:name=".IncomingMmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_WAP_PUSH"><intent-filter><action android:name="android.provider.Telephony.WAP_PUSH_DELIVER"/><data android:mimeType="application/vnd.wap.mms-message"/></intent-filter></receiver>
     <receiver android:name=".MmsSentResultReceiver" android:exported="false" />
+    <receiver android:name=".SmsNotificationReplyReceiver" android:exported="false" />
     <receiver android:name=".SmsSentResultReceiver" android:exported="false" />
     <receiver android:name=".SmsDeliveryResultReceiver" android:exported="false" />
     <service android:name=".GoogleMessagesBridge" android:label="Living World message previews" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true"><intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter></service>
