@@ -1,9 +1,16 @@
 name: Android build check
 on:
   pull_request:
-    branches: [main, feature/native-launcher-foundation, feature/unified-messages-foundation, feature/messages-notification-bridge, feature/messages-ui-review]
+    branches: [main]
   push:
-    branches: [main, feature/messages-ui-review, feature/native-launcher-grid, feature/unified-contacts-ui, fix/android-ui-device-polish, feature/real-messages-interactions, feature/lovable-backed-inbox, feature/native-portrait-inbox, feature/single-messages-inbox, feature/default-sms-foundation, feature/sms-thread-reader, feature/sms-compose-safety, feature/full-sms-mms-integration]
+    branches: [main]
+  workflow_dispatch:
+
+# Each new PR commit replaces the obsolete build for that PR.
+concurrency:
+  group: android-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   assemble-debug:
     runs-on: ubuntu-latest
