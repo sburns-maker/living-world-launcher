@@ -12,6 +12,7 @@
       android:authorities="com.livingworld.launcher.mmsdownloads"
       android:exported="false" android:grantUriPermissions="true" />
     <receiver android:name=".MmsDownloadResultReceiver" android:exported="false" />
+    <receiver android:name=".MmsRetryReceiver" android:exported="false" />
     <receiver android:name=".SmsSentResultReceiver" android:exported="false" />
     <receiver android:name=".SmsDeliveryResultReceiver" android:exported="false" />
     <service android:name=".GoogleMessagesBridge" android:label="Living World message previews" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true"><intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter></service>
