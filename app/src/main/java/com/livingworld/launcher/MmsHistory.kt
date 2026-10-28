@@ -85,7 +85,10 @@ object MmsHistory {
       while (count++ < MAX_PARTS && cursor.moveToNext()) {
         val mime = cursor.getString(typeIndex) ?: continue
         if (mime.equals("text/plain", ignoreCase = true)) {
-          cursor.getString(textIndex)?.takeIf { it.isNotBlank() }?.let(texts::add)
+          val inlineText = cursor.getString(textIndex)
+          val decoded = inlineText?.takeIf { it.isNotBlank() }
+            ?: readTextPart(context, cursor.getLong(idIndex))
+          decoded?.takeIf { it.isNotBlank() }?.let(texts::add)
         } else if (mime.startsWith("image/", ignoreCase = true) ||
                    mime.startsWith("video/", ignoreCase = true) ||
                    mime.startsWith("audio/", ignoreCase = true)) {
@@ -98,5 +101,26 @@ object MmsHistory {
       }
     }
     return texts.joinToString("\n") to media
+  }
+
+  /** Some providers store text in the part stream rather than the text column. */
+  private fun readTextPart(context: Context, partId: Long): String? {
+    val uri = Uri.parse("content://mms/part/$partId")
+    return try {
+      context.contentResolver.openInputStream(uri)?.use { stream ->
+        val buffer = ByteArray(64 * 1024 + 1)
+        var offset = 0
+        while (offset < buffer.size) {
+          val count = stream.read(buffer, offset, buffer.size - offset)
+          if (count <= 0) break
+          offset += count
+        }
+        if (offset > 64 * 1024) null
+        else String(buffer, 0, offset, Charsets.UTF_8)
+      }
+    } catch (error: Exception) {
+      Log.w(TAG, "Unable to read MMS text part", error)
+      null
+    }
   }
 }
