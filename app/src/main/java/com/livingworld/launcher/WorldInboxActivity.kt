@@ -22,6 +22,7 @@ import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceError
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ImageView
@@ -189,6 +190,15 @@ class WorldInboxActivity : Activity() {
           return try {
             startActivity(Intent(Intent.ACTION_VIEW, uri)); true
           } catch (_: Exception) { true }
+        }
+        override fun onReceivedError(
+          view: WebView?, request: WebResourceRequest?, error: WebResourceError?
+        ) {
+          super.onReceivedError(view, request, error)
+          if (request?.isForMainFrame != true) return
+          if (!WorldBackend.isAllowed(request.url.toString())) return
+          bridgeDiagnostic = "Cannot load the published Living World website (error ${error?.errorCode ?: -1}). Check its publish status and connection."
+          if (!showingConversation && !worldAuthenticated) render(worldThreads)
         }
         override fun onPageFinished(view: WebView?, url: String?) {
           super.onPageFinished(view, url)
