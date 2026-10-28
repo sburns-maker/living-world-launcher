@@ -5,6 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
 import android.util.Log
+import com.google.android.mms.pdu_alt.PduParser
+import com.google.android.mms.pdu_alt.NotificationInd
+import android.telephony.SmsManager
+import android.telephony.SubscriptionManager
 
 /**
  * Staging handler for MMS WAP_PUSH_DELIVER. NOT registered in the manifest.
@@ -21,8 +25,26 @@ class IncomingMmsReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
     if (!SmsRole.isDefault(context)) return
     when (val envelope = MmsWapEnvelope.from(intent)) {
-      is MmsWapEnvelope.Valid ->
-        Log.i(TAG, "MMS WAP envelope accepted; carrier download adapter not enabled")
+      is MmsWapEnvelope.Valid -> {
+        val notification = try {
+          PduParser(envelope.pdu).parse() as? NotificationInd
+        } catch (e: Exception) {
+          Log.w(TAG, "Unable to decode MMS notification", e)
+          null
+        }
+        if (notification == null) return
+        val location = notification.contentLocation?.toString(Charsets.ISO_8859_1)
+        if (location.isNullOrBlank()) return
+        val subscription = envelope.subscriptionId
+          ?: SmsManager.getDefaultSmsSubscriptionId().takeIf {
+            it != SubscriptionManager.INVALID_SUBSCRIPTION_ID
+          }
+        if (subscription == null) {
+          Log.w(TAG, "No valid SMS subscription for incoming MMS")
+          return
+        }
+        MmsCarrierDownload.enqueue(context, location, subscription)
+      }
       is MmsWapEnvelope.Invalid ->
         Log.w(TAG, "Discarded invalid MMS WAP envelope: ${envelope.reason}")
     }
