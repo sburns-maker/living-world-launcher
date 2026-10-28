@@ -61,7 +61,7 @@ object SmsTransport {
     } catch (_: Exception) { null }
     if (saved == null) return Validation.Blocked("Could not save outgoing message")
     val id = android.content.ContentUris.parseId(saved)
-    if (!SmsSendLedger.start(context, id, parts.size)) {
+    if (!SmsSendLedger.start(context, id, parts.size, subscription)) {
       context.contentResolver.delete(saved, null, null)
       return Validation.Blocked("Could not initialize send tracking")
     }
@@ -88,6 +88,7 @@ object SmsTransport {
       if (parts.size == 1) manager.sendTextMessage(address, null, body, sent[0], delivered[0])
       else manager.sendMultipartTextMessage(address, null, parts, sent, delivered)
     } catch (e: Exception) {
+      SmsSendLedger.markDispatchFailure(context, id)
       val failed = ContentValues().apply { put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_FAILED) }
       context.contentResolver.update(saved, failed, null, null)
       return Validation.Blocked("Carrier rejected send request")
