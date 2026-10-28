@@ -93,6 +93,7 @@ object SmsTransport {
       context.contentResolver.update(saved, failed, null, null)
       return Validation.Blocked("Carrier rejected send request")
     }
+    SmsNotification.submitted(context, "SMS", id.toInt())
     return verdict
   }
 }
