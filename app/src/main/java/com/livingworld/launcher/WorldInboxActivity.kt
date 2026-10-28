@@ -8,6 +8,10 @@ import android.content.ComponentName
 import android.provider.Settings
 import android.content.Intent
 import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.widget.EditText
+import android.widget.FrameLayout
+import org.json.JSONObject
 import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
@@ -31,9 +35,18 @@ import java.util.concurrent.Executors
  */
 class WorldInboxActivity : Activity() {
   private data class Thread(val id: String, val name: String, val preview: String, val photo: String, val unread: Int)
+  private data class WorldMessage(val id: String, val text: String, val outgoing: Boolean, val at: Long)
   private var web: WebView? = null
   private lateinit var rows: LinearLayout
   private lateinit var listPage: LinearLayout
+  private lateinit var chatPage: LinearLayout
+  private lateinit var chatMessages: LinearLayout
+  private lateinit var chatScroll: ScrollView
+  private lateinit var aiComposer: EditText
+  private lateinit var aiStatus: android.widget.TextView
+  private var selectedWorldThread: Thread? = null
+  private var signingIn = false
+  private var worldAuthenticated = false
   private var showingConversation = false
   private var worldThreads = emptyList<Thread>()
   private val pictures = Executors.newFixedThreadPool(2)
@@ -54,6 +67,27 @@ class WorldInboxActivity : Activity() {
         items
       } catch (_: Exception) { return }
       runOnUiThread { render(parsed) }
+    }
+    @JavascriptInterface fun receiveMessages(json: String) {
+      if (json.length > 250000) return
+      val payload = try {
+        val data = JSONObject(json)
+        val id = data.optString("conversationId")
+        if (!Regex("^[a-fA-F0-9-]{36}$").matches(id)) return
+        val messages = data.optJSONArray("messages") ?: return
+        val parsed = (0 until minOf(messages.length(), 120)).mapNotNull { i ->
+          val row = messages.optJSONObject(i) ?: return@mapNotNull null
+          val messageId = row.optString("id")
+          if (!Regex("^[a-fA-F0-9-]{36}$").matches(messageId)) return@mapNotNull null
+          WorldMessage(messageId, row.optString("text").take(4000),
+            row.optBoolean("outgoing"), row.optLong("timestamp"))
+        }
+        Pair(id, parsed)
+      } catch (_: Exception) { return }
+      runOnUiThread {
+        if (!isFinishing && !isDestroyed && selectedWorldThread?.id == payload.first)
+          renderAiMessages(payload.second)
+      }
     }
   }
   override fun onCreate(savedInstanceState: Bundle?) {
