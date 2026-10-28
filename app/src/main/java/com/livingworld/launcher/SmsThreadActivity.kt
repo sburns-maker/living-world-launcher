@@ -35,9 +35,10 @@ class SmsThreadActivity : Activity() {
     val stack = UiKit.vertical(this, 8)
     scroll.addView(stack)
     root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+    val mmsRows = MmsHistory.messages(this, id)
     val timeline = (
       SmsThreads.messages(this, id).map { Triple(it.timestamp, it.outgoing, it.body) } +
-      MmsHistory.messages(this, id).map { m ->
+      mmsRows.map { m ->
         val attachmentLabel = if (m.mediaParts.isEmpty()) "" else
           "\n" + m.mediaParts.joinToString(", ") { it.mimeType.substringBefore("/") + " attachment" }
         Triple(m.timestampMillis, m.outgoing, m.text + attachmentLabel)
@@ -55,7 +56,7 @@ class SmsThreadActivity : Activity() {
         gravity = if (m.second) Gravity.END else Gravity.START
         addView(bubble)
       }
-      MmsHistory.messages(this, id).firstOrNull { it.timestampMillis == m.first }?.mediaParts?.firstOrNull()?.let { part -> MmsThumbnail.view(this, part)?.let { line.addView(it) } }
+      mmsRows.firstOrNull { it.timestampMillis == m.first }?.mediaParts?.firstOrNull()?.let { part -> MmsThumbnail.view(this, part)?.let { line.addView(it) } }
       stack.addView(line)
       stack.addView(UiKit.gap(this, 5))
     }
