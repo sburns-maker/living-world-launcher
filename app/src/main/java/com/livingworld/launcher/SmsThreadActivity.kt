@@ -1,6 +1,7 @@
 package com.livingworld.launcher
 
 import android.app.Activity
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.widget.ImageView
 import android.os.Bundle
@@ -60,7 +61,11 @@ class SmsThreadActivity : Activity() {
       stack.addView(line)
       stack.addView(UiKit.gap(this, 5))
     }
+    root.addView(UiKit.clickable(this, "Reply or send a picture") {
+      startActivity(Intent(this, SmsComposeActivity::class.java)
+        .putExtra("address", intent.getStringExtra("address").orEmpty()))
+    })
     root.addView(UiKit.text(this,
-      "Read-only preview. Sending and MMS are not enabled yet.", 12f, UiKit.muted))
+      "Carrier test mode: verify sent and delivered results in Messages > Carrier test.", 12f, UiKit.muted))
   }
 }
