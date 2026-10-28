@@ -45,6 +45,8 @@ class MmsDownloadResultReceiver : BroadcastReceiver() {
       Log.e(TAG, "Unable to persist downloaded MMS", e)
     } finally {
       MmsDownloadLedger.settle(context, subscription, location, persisted)
+      if (persisted) MmsRetryStore.completed(context, subscription, location)
+      else MmsRetryStore.failure(context, subscription, location)
       // Retain a bounded failed payload for explicit recovery instead of discarding
       // a successfully downloaded message after a transient provider error.
       if (persisted && staged.exists()) staged.delete()
