@@ -40,7 +40,13 @@ object MmsCarrierDownload {
       context, 0, callback, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
     return try {
-      try { context.grantUriPermission("com.android.phone", destination, Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+      // Limited grants to the two common Android carrier MMS service packages.
+      for (servicePackage in listOf("com.android.phone", "com.android.mms.service")) {
+        try {
+          context.grantUriPermission(servicePackage, destination,
+            Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        } catch (_: Exception) { }
+      }
       downloadTo(context, contentLocation, subscriptionId, destination, completion)
       true
     } catch (error: Exception) {
