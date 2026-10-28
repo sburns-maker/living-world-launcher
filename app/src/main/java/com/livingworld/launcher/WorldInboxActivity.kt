@@ -68,6 +68,9 @@ class WorldInboxActivity : Activity() {
     listPage = UiKit.vertical(this, 16).apply { setBackgroundColor(UiKit.bg) }
     val header = UiKit.horizontal(this)
     header.addView(UiKit.text(this, "Messages", 28f, UiKit.ink, true), LinearLayout.LayoutParams(0, -2, 1f))
+    header.addView(UiKit.clickable(this, "Test") {
+      startActivity(Intent(this, CarrierTestActivity::class.java))
+    })
     header.addView(UiKit.clickable(this, "✎") { startActivity(Intent(this, SmsComposeActivity::class.java)) })
     listPage.addView(header)
     rows = UiKit.vertical(this)
