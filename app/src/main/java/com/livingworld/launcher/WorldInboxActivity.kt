@@ -362,6 +362,82 @@ class WorldInboxActivity : Activity() {
     else LinearLayout.LayoutParams(-1, UiKit.dp(this, 2))
   }
 
+  private fun beginGoogleSignin() {
+    bridgeDiagnostic = "Opening Google sign-in in Chrome…"
+    render(worldThreads)
+    pictures.execute {
+      val link = runCatching { WorldOAuthHandoff.begin(applicationContext) }
+      runOnUiThread {
+        if (isFinishing || isDestroyed) return@runOnUiThread
+        link.onSuccess { url ->
+          try {
+            startActivity(Intent(Intent.ACTION_VIEW, url)
+              .addCategory(Intent.CATEGORY_BROWSABLE))
+          } catch (_: Exception) {
+            bridgeDiagnostic = "Could not open your browser for Google sign-in."
+            render(worldThreads)
+          }
+        }.onFailure { error ->
+          bridgeDiagnostic = error.message ?: "Could not prepare secure Google sign-in."
+          render(worldThreads)
+        }
+      }
+    }
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    pendingGoogleSession = WorldOAuthHandoff.take() ?: pendingGoogleSession
+    if (pendingGoogleSession != null) {
+      googleSessionApplying = false
+      bridgeDiagnostic = "Google sign-in returned! Connecting your AI messages…"
+      if (::rows.isInitialized) render(worldThreads)
+      web?.loadUrl(WorldBackend.INBOX_URL)
+      scheduleGoogleSessionApply()
+    }
+  }
+
+  private fun scheduleGoogleSessionApply() {
+    for (delay in longArrayOf(150L, 1000L, 2500L, 5000L, 8500L)) {
+      Handler(Looper.getMainLooper()).postDelayed({
+        if (!isFinishing && !isDestroyed && pendingGoogleSession != null)
+          applyGoogleSession()
+      }, delay)
+    }
+  }
+
+  private fun applyGoogleSession() {
+    if (googleSessionApplying) return
+    val browser = web ?: return
+    if (!WorldBackend.isAllowed(browser.url.orEmpty())) return
+    val session = pendingGoogleSession ?: return
+    googleSessionApplying = true
+    val script = "(async function(){if(typeof window.__livingWorldAndroidAcceptSession" +
+      "!=='function')return 'not-ready';try{await window.__livingWorldAndroidAcceptSession(" +
+      JSONObject.quote(session.access) + "," + JSONObject.quote(session.refresh) +
+      ");return 'success';}catch(e){return 'failed';}})()"
+    browser.evaluateJavascript(script) { reply ->
+      googleSessionApplying = false
+      if (isFinishing || isDestroyed) return@evaluateJavascript
+      when (reply) {
+        "\"success\"" -> {
+          pendingGoogleSession = null
+          bridgeDiagnostic = "Google connected. Loading AI conversations…"
+          if (!showingConversation) render(worldThreads)
+        }
+        "\"failed\"" -> {
+          pendingGoogleSession = null
+          bridgeDiagnostic = "Website rejected the returned session. Check that the site changes are published."
+          if (!showingConversation) render(worldThreads)
+        }
+        else -> {
+          bridgeDiagnostic = "Waiting for the published website's Android sign-in receiver…"
+          if (!showingConversation) render(worldThreads)
+        }
+      }
+    }
+  }
+
   private fun showNative() {
     showingConversation = false
     signingIn = false
