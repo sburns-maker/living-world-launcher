@@ -13,6 +13,10 @@
       android:exported="false" android:grantUriPermissions="true" />
     <receiver android:name=".MmsDownloadResultReceiver" android:exported="false" />
     <receiver android:name=".MmsRetryReceiver" android:exported="false" />
+    <receiver android:name=".IncomingSmsReceiver" android:exported="true"
+      android:enabled="false" android:permission="android.permission.BROADCAST_SMS">
+      <intent-filter><action android:name="android.provider.Telephony.SMS_DELIVER" /></intent-filter>
+    </receiver>
     <receiver android:name=".SmsSentResultReceiver" android:exported="false" />
     <receiver android:name=".SmsDeliveryResultReceiver" android:exported="false" />
     <service android:name=".GoogleMessagesBridge" android:label="Living World message previews" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true"><intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter></service>
