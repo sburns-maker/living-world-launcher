@@ -66,7 +66,14 @@ class SmsComposeActivity : Activity() {
           if (verdict is SmsTransport.Validation.Blocked) Result.failure(IllegalStateException(verdict.reason))
           else Result.success(Unit)
         }
-        Toast.makeText(this, result.exceptionOrNull()?.message ?: "Carrier send requested", Toast.LENGTH_LONG).show()
+        if (result.isFailure) {
+          Toast.makeText(this, result.exceptionOrNull()?.message ?: "Send blocked", Toast.LENGTH_LONG).show()
+        } else if (numbers.size == 1 && selectedImage == null) {
+          Toast.makeText(this, "Submitted to Android; carrier result pending", Toast.LENGTH_LONG).show()
+          startActivity(Intent(this, CarrierTestActivity::class.java))
+        } else {
+          Toast.makeText(this, "MMS submitted; delivery not confirmed", Toast.LENGTH_LONG).show()
+        }
       }
     })
     root.addView(UiKit.clickable(this, "Save draft (not yet available)") {
