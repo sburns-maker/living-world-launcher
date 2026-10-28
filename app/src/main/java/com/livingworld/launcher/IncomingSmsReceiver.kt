@@ -40,8 +40,15 @@ class IncomingSmsReceiver : BroadcastReceiver() {
       // merely because their contents are equal.
       if (alreadyPersisted(context, address, timestamp, body)) return
       val inserted = context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)
-      if (inserted != null) SmsNotification.incoming(context, address, body, null)
-      // TODO: notify, deduplicate repeated deliveries, and reconcile carrier multipart status.
+      if (inserted != null) {
+        val threadId = try {
+          context.contentResolver.query(inserted, arrayOf(Telephony.Sms.THREAD_ID),
+            null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getLong(0) else null
+          }
+        } catch (_: Exception) { null }
+        SmsNotification.incoming(context, address, body, threadId)
+      }
     } catch (e: Exception) {
       Log.e("IncomingSmsReceiver", "Unable to persist incoming SMS", e)
     }
