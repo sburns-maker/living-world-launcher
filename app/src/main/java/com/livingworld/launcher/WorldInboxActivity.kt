@@ -51,6 +51,8 @@ class WorldInboxActivity : Activity() {
   private var selectedWorldThread: Thread? = null
   private var signingIn = false
   private var worldAuthenticated = false
+  private var pendingGoogleSession: WorldOAuthHandoff.Session? = null
+  private var googleSessionApplying = false
   private var bridgeDiagnostic = "Sign in inside the app to sync AI conversations."
   private var webBridgeLoaded = false
   private var chatBridgeLoaded = false
@@ -75,6 +77,7 @@ class WorldInboxActivity : Activity() {
       } catch (_: Exception) { return }
       runOnUiThread {
         worldAuthenticated = true
+        pendingGoogleSession = null
         webBridgeLoaded = true
         bridgeDiagnostic = "Connected — ${parsed.size} AI conversations synchronized."
         if (signingIn) showNative()
@@ -108,6 +111,7 @@ class WorldInboxActivity : Activity() {
   }
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    pendingGoogleSession = WorldOAuthHandoff.take()
     window.statusBarColor = UiKit.bg
     window.navigationBarColor = UiKit.bg
     window.decorView.systemUiVisibility =
@@ -205,6 +209,7 @@ class WorldInboxActivity : Activity() {
           // Probe after every allowed inbox load, including Retry (not only sign-in).
           // This also works against the older published inbox without its JS bridge.
           if (WorldBackend.isAllowed(url.orEmpty())) {
+            if (pendingGoogleSession != null) scheduleGoogleSessionApply()
             val path = Uri.parse(url).path.orEmpty()
             if (path == "/inbox") scheduleInboxProbe()
             else if (path.startsWith("/chat/")) selectedWorldThread?.let {
@@ -469,9 +474,7 @@ class WorldInboxActivity : Activity() {
       rows.addView(UiKit.text(this,
         "AI conversations aren't connected to this installation yet.", 14f, UiKit.muted))
       rows.addView(UiKit.text(this, bridgeDiagnostic, 12f, UiKit.muted))
-      rows.addView(UiKit.clickable(this, "Sign in inside Living World") {
-        showBrowser(WorldBackend.INBOX_URL)
-      })
+      rows.addView(UiKit.clickable(this, "Connect with Google") { beginGoogleSignin() })
       rows.addView(UiKit.clickable(this, "Retry AI conversation sync") {
         bridgeDiagnostic = "Checking the published Living World inbox…"
         web?.loadUrl(WorldBackend.INBOX_URL)
