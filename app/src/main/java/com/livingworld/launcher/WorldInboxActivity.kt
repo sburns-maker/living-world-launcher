@@ -12,6 +12,7 @@ import android.graphics.Color
 import android.widget.EditText
 import android.widget.FrameLayout
 import org.json.JSONObject
+import org.json.JSONTokener
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -188,30 +189,16 @@ class WorldInboxActivity : Activity() {
         }
         override fun onPageFinished(view: WebView?, url: String?) {
           super.onPageFinished(view, url)
-          if (!signingIn || selectedWorldThread != null ||
-              !WorldBackend.isAllowed(url.orEmpty())) return
-          val path = Uri.parse(url).path.orEmpty()
-          if (path == "/inbox") {
-            Handler(Looper.getMainLooper()).postDelayed({
-              if (!isFinishing && !isDestroyed && !worldAuthenticated &&
-                  WorldBackend.isAllowed(view?.url.orEmpty())) {
-                view?.evaluateJavascript(
-                  "(function(){return Boolean(window.__livingWorldInboxBridgeReady);})()"
-                ) { ready ->
-                  if (!worldAuthenticated && !isFinishing && !isDestroyed) {
-                    bridgeDiagnostic = if (ready == "true")
-                      "Website bridge detected; waiting for authenticated conversations. Sign in inside this app."
-                    else
-                      "No AI sync bridge detected on the published website. Publish the latest Living World changes in Lovable, then retry."
-                    if (!showingConversation) render(worldThreads)
-                  }
-                }
-              }
-            }, 7000)
-          }
-          if (path != "/auth" && path != "/login" && path != "/inbox" &&
-              !path.startsWith("/chat/")) {
-            view?.post { if (signingIn) view.loadUrl(WorldBackend.INBOX_URL) }
+          // Probe after every allowed inbox load, including Retry (not only sign-in).
+          // This also works against the older published inbox without its JS bridge.
+          if (WorldBackend.isAllowed(url.orEmpty())) {
+            val path = Uri.parse(url).path.orEmpty()
+            if (path == "/inbox") scheduleInboxProbe()
+            if (signingIn && selectedWorldThread == null &&
+                path != "/auth" && path != "/login" && path != "/inbox" &&
+                !path.startsWith("/chat/")) {
+              view?.post { if (signingIn) view.loadUrl(WorldBackend.INBOX_URL) }
+            }
           }
         }
       }
@@ -220,18 +207,105 @@ class WorldInboxActivity : Activity() {
     }
     web = browser
     // The game session stays loaded, without taking space from the scrollable inbox.
-    browser.visibility = View.GONE
-    root.addView(browser, LinearLayout.LayoutParams(-1, 0, 1f))
+    root.addView(browser, LinearLayout.LayoutParams(-1, UiKit.dp(this, 2)))
+    setWebMode(false)
+    scheduleInboxProbe()
     maybeRequestContacts()
   }
+
+  /**
+   * Old published Living World builds still render /chat/{uuid} anchor rows.
+   * Read just their display metadata from our allowlisted authenticated WebView.
+   * This fallback is read-only; sending still requires the real authenticated bridge.
+   */
+  private fun probeAuthenticatedInbox() {
+    val browser = web ?: return
+    val url = browser.url.orEmpty()
+    if (!WorldBackend.isAllowed(url) || selectedWorldThread != null) return
+    val path = Uri.parse(url).path.orEmpty()
+    if (path != "/inbox") {
+      if (!worldAuthenticated) {
+        bridgeDiagnostic = if (path == "/auth" || path == "/login")
+          "Sign in on the page inside this app; your Chrome session is separate."
+        else "Website opened $path; waiting for its inbox."
+        if (!showingConversation) render(worldThreads)
+      }
+      return
+    }
+    val js = """(function() {
+      try {
+        const links = Array.from(document.querySelectorAll('a[href]'));
+        const items = [];
+        const known = new Set();
+        for (const link of links) {
+          const url = new URL(link.getAttribute('href'), location.href);
+          const match = /^\/chat\/([0-9a-fA-F-]{36})\/?$/.exec(url.pathname);
+          if (!match || known.has(match[1])) continue;
+          known.add(match[1]);
+          const name = link.querySelector('span.font-semibold,span.font-medium')?.textContent?.trim()
+            || link.querySelector('span')?.textContent?.trim() || '';
+          const preview = link.querySelector('p')?.textContent?.trim() || '';
+          const img = link.querySelector('img');
+          if (!name) continue;
+          items.push({id:match[1],name:name.slice(0,60),
+            preview:preview.slice(0,160),photo:img?.src||'',unread:0});
+          if (items.length >= 40) break;
+        }
+        return JSON.stringify({state:'inbox',rows:items,
+          bridge:Boolean(window.__livingWorldInboxBridgeReady),
+          loaded:document.readyState});
+      } catch (e) { return JSON.stringify({state:'probe-error'}); }
+    })()"""
+    browser.evaluateJavascript(js) { raw ->
+      if (isFinishing || isDestroyed || worldAuthenticated) return@evaluateJavascript
+      try {
+        val payload = JSONObject(JSONTokener(raw).nextValue() as String)
+        val matches = payload.optJSONArray("rows")
+        if (matches != null && matches.length() > 0) {
+          bridgeDiagnostic = "Using authenticated inbox preview; native message bridge not yet published."
+          webBridge.receiveInbox(matches.toString())
+        } else {
+          bridgeDiagnostic = if (payload.optBoolean("bridge"))
+            "Website bridge loaded; awaiting its conversation data. Check the app login."
+          else "The published website has not provided the native bridge yet. Publish the GitHub changes in Lovable."
+          if (!showingConversation) render(worldThreads)
+        }
+      } catch (_: Exception) {
+        bridgeDiagnostic = "Could not read the website's inbox. Check your sign-in and published URL."
+        if (!showingConversation) render(worldThreads)
+      }
+    }
+  }
+
+  private fun scheduleInboxProbe() {
+    for (delay in longArrayOf(1000L, 3500L, 9000L)) {
+      Handler(Looper.getMainLooper()).postDelayed({
+        if (!isFinishing && !isDestroyed && !worldAuthenticated)
+          probeAuthenticatedInbox()
+      }, delay)
+    }
+  }
+
+  /** Keep an authenticated page live for synchronization without taking inbox space. */
+  private fun setWebMode(visible: Boolean) {
+    val browser = web ?: return
+    browser.visibility = View.VISIBLE
+    browser.alpha = if (visible) 1f else 0.01f
+    browser.isClickable = visible
+    browser.layoutParams = if (visible)
+      LinearLayout.LayoutParams(-1, 0, 1f)
+    else LinearLayout.LayoutParams(-1, UiKit.dp(this, 2))
+  }
+
   private fun showNative() {
     showingConversation = false
     signingIn = false
     selectedWorldThread = null
     chatPage.visibility = View.GONE
     listPage.visibility = View.VISIBLE
-    web?.visibility = View.GONE
+    setWebMode(false)
     web?.loadUrl(WorldBackend.INBOX_URL)
+    scheduleInboxProbe()
     render(worldThreads)
   }
   private fun showBrowser(url: String) {
@@ -240,7 +314,7 @@ class WorldInboxActivity : Activity() {
     bridgeDiagnostic = "Waiting for the published Living World website to sync…"
     listPage.visibility = View.GONE
     chatPage.visibility = View.GONE
-    web?.visibility = View.VISIBLE
+    setWebMode(true)
     web?.loadUrl(url)
   }
   private fun openNativeWorldChat(thread: Thread) {
@@ -249,7 +323,7 @@ class WorldInboxActivity : Activity() {
     signingIn = false
     listPage.visibility = View.GONE
     chatPage.visibility = View.VISIBLE
-    web?.visibility = View.GONE
+    setWebMode(false)
     aiComposer.setText("")
     aiStatus.text = "Loading messages…"
     chatMessages.removeAllViews()
@@ -335,6 +409,7 @@ class WorldInboxActivity : Activity() {
       rows.addView(UiKit.clickable(this, "Retry AI conversation sync") {
         bridgeDiagnostic = "Checking the published Living World inbox…"
         web?.loadUrl(WorldBackend.INBOX_URL)
+        scheduleInboxProbe()
         render(worldThreads)
       })
     } else if (threads.isEmpty()) {
@@ -365,7 +440,7 @@ class WorldInboxActivity : Activity() {
     renderRealNotifications()
     if (!showingConversation) {
       listPage.visibility = View.VISIBLE
-      web?.visibility = View.GONE
+      setWebMode(false)
     }
   }
   override fun onResume() {
