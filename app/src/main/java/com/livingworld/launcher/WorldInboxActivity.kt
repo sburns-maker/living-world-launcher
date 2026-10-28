@@ -299,10 +299,17 @@ class WorldInboxActivity : Activity() {
     }
     for (t in threads) {
       val line = UiKit.horizontal(this)
-      val picture = ImageView(this)
-      picture.background = UiKit.surface(this, android.graphics.Color.rgb(237,232,250), 50)
-      picture.clipToOutline = true
-      line.addView(picture, LinearLayout.LayoutParams(UiKit.dp(this, 52), UiKit.dp(this, 52)))
+      val avatar = FrameLayout(this).apply {
+        background = UiKit.surface(this@WorldInboxActivity,
+          Color.rgb(237,232,250), 50)
+        clipToOutline = true
+      }
+      val initial = UiKit.text(this, t.name.trim().take(1).uppercase().ifBlank { "?" },
+        22f, UiKit.lavender, true).apply { gravity = Gravity.CENTER }
+      avatar.addView(initial, FrameLayout.LayoutParams(-1, -1))
+      val picture = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+      avatar.addView(picture, FrameLayout.LayoutParams(-1, -1))
+      line.addView(avatar, LinearLayout.LayoutParams(UiKit.dp(this, 52), UiKit.dp(this, 52)))
       loadPhoto(picture, t.photo)
       val detail = UiKit.vertical(this, 10)
       detail.addView(UiKit.text(this, t.name + if(t.unread > 0) "  • ${t.unread}" else "", 17f, UiKit.ink, t.unread > 0))
