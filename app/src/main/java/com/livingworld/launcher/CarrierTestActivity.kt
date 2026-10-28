@@ -81,6 +81,10 @@ class CarrierTestActivity : Activity() {
     val smsPermission = if (checkSelfPermission(Manifest.permission.SEND_SMS) ==
         android.content.pm.PackageManager.PERMISSION_GRANTED) "granted" else "missing"
     status.text = "Android SMS role: $role\nProvider default: $provider\nSEND_SMS permission: $smsPermission\nOutgoing test session: $sending\nPending MMS recovery entries: ${MmsRetryStore.pendingCount(this)}"
+    val phonePermission = if (checkSelfPermission(Manifest.permission.READ_PHONE_STATE) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED) "granted" else "missing"
+    status.append("\nMMS Phone access: " + phonePermission +
+      "\nNotifications: " + SmsNotification.permissionStatus(this))
     if (::sendResults.isInitialized) sendResults.text = SmsCarrierDiagnostics.summary(this) + "\n\n" + MmsSendLedger.recent(this)
 
   }
@@ -120,6 +124,13 @@ class CarrierTestActivity : Activity() {
       requestPermissions(arrayOf(Manifest.permission.READ_SMS, Manifest.permission.RECEIVE_SMS,
         Manifest.permission.RECEIVE_MMS, Manifest.permission.SEND_SMS), 405)
     }
+  }
+
+  override fun onRequestPermissionsResult(
+    requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+  ) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    if (requestCode == 405) refresh()
   }
 
   @Deprecated("Deprecated in Java")
