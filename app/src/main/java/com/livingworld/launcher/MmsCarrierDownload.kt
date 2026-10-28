@@ -26,6 +26,7 @@ object MmsCarrierDownload {
       return false
     if (!contentLocation.startsWith("http://", true) &&
         !contentLocation.startsWith("https://", true)) return false
+    if (!MmsDownloadLedger.begin(context, subscriptionId, contentLocation)) return false
     val token = UUID.randomUUID().toString()
     val destination = MmsDownloadProvider.destination(context, token)
     val callback = Intent(context, MmsDownloadResultReceiver::class.java)
@@ -33,6 +34,8 @@ object MmsCarrierDownload {
       .setData(destination)
       .putExtra(MmsDownloadResultReceiver.EXTRA_TOKEN, token)
       .putExtra(MmsDownloadResultReceiver.EXTRA_SUBSCRIPTION, subscriptionId)
+      .putExtra(MmsDownloadResultReceiver.EXTRA_LOCATION, contentLocation)
+      .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION)
     val completion = PendingIntent.getBroadcast(
       context, 0, callback, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
@@ -40,6 +43,7 @@ object MmsCarrierDownload {
       downloadTo(context, contentLocation, subscriptionId, destination, completion)
       true
     } catch (error: Exception) {
+      MmsDownloadLedger.settle(context, subscriptionId, contentLocation, false)
       Log.e(TAG, "Unable to request carrier MMS download", error)
       false
     }
