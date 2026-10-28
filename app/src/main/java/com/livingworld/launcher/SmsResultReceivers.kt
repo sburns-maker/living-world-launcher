@@ -17,7 +17,7 @@ import android.util.Log
  */
 class SmsSentResultReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
-    if (intent.action != ACTION_SENT || !SmsRole.isDefault(context)) return
+    if (intent.action != ACTION_SENT) return
     val messageId = intent.getLongExtra(EXTRA_MESSAGE_ID, -1L)
     val part = intent.getIntExtra(EXTRA_PART, -1)
     val total = intent.getIntExtra(EXTRA_TOTAL, -1)
@@ -50,7 +50,7 @@ class SmsSentResultReceiver : BroadcastReceiver() {
 
 class SmsDeliveryResultReceiver : BroadcastReceiver() {
   override fun onReceive(context: Context, intent: Intent) {
-    if (intent.action != ACTION_DELIVERED || !SmsRole.isDefault(context)) return
+    if (intent.action != ACTION_DELIVERED) return
     val id = intent.getLongExtra(SmsSentResultReceiver.EXTRA_MESSAGE_ID, -1L)
     if (id < 0) return
     val part = intent.getIntExtra(SmsSentResultReceiver.EXTRA_PART, -1)
