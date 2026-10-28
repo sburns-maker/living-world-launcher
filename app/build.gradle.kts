@@ -35,6 +35,7 @@ android {
     signingConfigs {
       create("stableDevelopment") {
         storeFile = File(testSigningDirectory, testSigning.getProperty("storeFile", "test-signing.p12"))
+        storeType = "PKCS12"
         storePassword = testSigning.getProperty("storePassword")
         keyAlias = testSigning.getProperty("keyAlias")
         keyPassword = testSigning.getProperty("keyPassword")
