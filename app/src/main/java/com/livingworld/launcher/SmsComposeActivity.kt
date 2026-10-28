@@ -50,6 +50,9 @@ class SmsComposeActivity : Activity() {
     })
     thumbnail = ImageView(this).apply { adjustViewBounds = true; maxHeight = UiKit.dp(this@SmsComposeActivity, 180) }
     root.addView(thumbnail)
+    root.addView(UiKit.clickable(this, "Carrier test setup / SMS status") {
+      startActivity(Intent(this, CarrierTestActivity::class.java))
+    })
     root.addView(UiKit.clickable(this, "Send message") {
       val numbers = recipient.text.toString().split(',', ';').map { it.trim() }.filter { it.isNotEmpty() }
       val message = body.text.toString()
@@ -70,7 +73,7 @@ class SmsComposeActivity : Activity() {
       Toast.makeText(this, "Draft storage and sending are disabled until SMS engine validation", Toast.LENGTH_LONG).show()
     })
     root.addView(UiKit.text(this,
-      "Preview only. We will not send or save texts until receiving, sending, and MMS are ready.", 13f, UiKit.muted))
+      "Carrier test only. Sending requires the Android SMS role and an active test session. If blocked, check Carrier test setup.", 13f, UiKit.muted))
   }
   @Deprecated("Deprecated in Java")
   override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
