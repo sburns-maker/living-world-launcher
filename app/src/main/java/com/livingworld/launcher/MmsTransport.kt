@@ -14,13 +14,17 @@ import com.klinker.android.send_message.Transaction
 object MmsTransport {
   const val SEND_ENABLED = false
 
-  fun sendPhoto(context: Context, address: String, caption: String, bitmap: Bitmap): Result<Unit> {
+  fun sendPhoto(context: Context, address: String, caption: String, bitmap: Bitmap): Result<Unit> =
+    sendGroup(context, listOf(address), caption, bitmap)
+
+  fun sendGroup(context: Context, recipients: List<String>, caption: String, bitmap: Bitmap? = null): Result<Unit> {
     if (!SmsRole.isDefault(context)) return Result.failure(IllegalStateException("Not default SMS handler"))
     if (!SEND_ENABLED) return Result.failure(IllegalStateException("MMS sending is not enabled"))
-    if (address.isBlank() || bitmap.isRecycled) return Result.failure(IllegalArgumentException("Invalid MMS contents"))
+    if (recipients.isEmpty() || recipients.size > 10 || recipients.any { !Regex("^\\+?[0-9() .-]{3,24}$").matches(it) } || bitmap?.isRecycled == true)
+      return Result.failure(IllegalArgumentException("Invalid MMS recipients or image"))
     return runCatching {
-      val settings = Settings().apply { setUseSystemSending(true) }
-      val message = Message(caption, address).apply { setImage(bitmap) }
+      val settings = Settings().apply { setUseSystemSending(true); setGroup(true) }
+      val message = Message(caption, recipients.toTypedArray()).apply { if (bitmap != null) setImage(bitmap) }
       Transaction(context, settings).sendNewMessage(message)
     }
   }
