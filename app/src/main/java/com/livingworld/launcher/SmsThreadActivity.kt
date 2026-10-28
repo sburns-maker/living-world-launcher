@@ -83,7 +83,7 @@ class SmsThreadActivity : Activity() {
         }
         content.addView(bubble)
       }
-      pictures.forEach(content::addView)
+      pictures.forEach { content.addView(it) }
       line.addView(content)
       stack.addView(line)
       stack.addView(UiKit.gap(this, 5))
