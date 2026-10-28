@@ -52,6 +52,7 @@ class WorldInboxActivity : Activity() {
   private var worldAuthenticated = false
   private var bridgeDiagnostic = "Sign in inside the app to sync AI conversations."
   private var webBridgeLoaded = false
+  private var chatBridgeLoaded = false
   private var showingConversation = false
   private var worldThreads = emptyList<Thread>()
   private val pictures = Executors.newFixedThreadPool(2)
@@ -97,8 +98,10 @@ class WorldInboxActivity : Activity() {
         Pair(id, parsed)
       } catch (_: Exception) { return }
       runOnUiThread {
-        if (!isFinishing && !isDestroyed && selectedWorldThread?.id == payload.first)
+        if (!isFinishing && !isDestroyed && selectedWorldThread?.id == payload.first) {
+          chatBridgeLoaded = true
           renderAiMessages(payload.second)
+        }
       }
     }
   }
@@ -194,6 +197,9 @@ class WorldInboxActivity : Activity() {
           if (WorldBackend.isAllowed(url.orEmpty())) {
             val path = Uri.parse(url).path.orEmpty()
             if (path == "/inbox") scheduleInboxProbe()
+            else if (path.startsWith("/chat/")) selectedWorldThread?.let {
+              if (path == "/chat/" + it.id) scheduleChatProbe(it.id)
+            }
             if (signingIn && selectedWorldThread == null &&
                 path != "/auth" && path != "/login" && path != "/inbox" &&
                 !path.startsWith("/chat/")) {
@@ -286,6 +292,50 @@ class WorldInboxActivity : Activity() {
     }
   }
 
+  private fun scheduleChatProbe(conversationId: String) {
+    for (delay in longArrayOf(1500L, 4500L, 10000L)) {
+      Handler(Looper.getMainLooper()).postDelayed({
+        if (!isFinishing && !isDestroyed && selectedWorldThread?.id == conversationId &&
+            !chatBridgeLoaded) probeChatPreview(conversationId)
+      }, delay)
+    }
+  }
+
+  private fun probeChatPreview(conversationId: String) {
+    val browser = web ?: return
+    val url = browser.url.orEmpty()
+    if (!WorldBackend.isAllowed(url) || Uri.parse(url).path != "/chat/$conversationId")
+      return
+    val js = """(function(){
+      try {
+        const region = document.querySelector('[role="region"][aria-label^="Messages with"]');
+        if (!region) return JSON.stringify({state:'loading'});
+        const buttons = Array.from(region.querySelectorAll('button.bubble-in')).slice(-120);
+        return JSON.stringify({state:'ready',messages:buttons.map((b,i)=>({
+          text:(b.textContent||'').slice(0,4000),
+          outgoing:b.classList.contains('bg-bubble-me'),
+          at:0,id:'00000000-0000-4000-8000-'+String(i).padStart(12,'0')
+        }))});
+      } catch (e) {return JSON.stringify({state:'error'});}
+    })()"""
+    browser.evaluateJavascript(js) { raw ->
+      if (isFinishing || isDestroyed || chatBridgeLoaded ||
+          selectedWorldThread?.id != conversationId) return@evaluateJavascript
+      try {
+        val payload = JSONObject(JSONTokener(raw).nextValue() as String)
+        val messages = payload.optJSONArray("messages") ?: return@evaluateJavascript
+        if (messages.length() == 0) return@evaluateJavascript
+        val parsed = (0 until messages.length()).mapNotNull { i ->
+          val item = messages.optJSONObject(i) ?: return@mapNotNull null
+          WorldMessage(item.optString("id"), item.optString("text"),
+            item.optBoolean("outgoing"), 0L, "")
+        }
+        renderAiMessages(parsed)
+        aiStatus.text = "Chat preview — publish the website bridge for native replies and photos."
+      } catch (_: Exception) { /* Wait for the authenticated page to load. */ }
+    }
+  }
+
   /** Keep an authenticated page live for synchronization without taking inbox space. */
   private fun setWebMode(visible: Boolean) {
     val browser = web ?: return
@@ -319,6 +369,7 @@ class WorldInboxActivity : Activity() {
   }
   private fun openNativeWorldChat(thread: Thread) {
     selectedWorldThread = thread
+    chatBridgeLoaded = false
     showingConversation = true
     signingIn = false
     listPage.visibility = View.GONE
@@ -330,6 +381,7 @@ class WorldInboxActivity : Activity() {
     val header = chatPage.getChildAt(0) as? LinearLayout
     (header?.getChildAt(1) as? android.widget.TextView)?.text = thread.name
     web?.loadUrl(WorldBackend.ORIGIN + "/chat/" + thread.id)
+    scheduleChatProbe(thread.id)
   }
   private fun sendAiText() {
     val thread = selectedWorldThread ?: return
@@ -337,6 +389,10 @@ class WorldInboxActivity : Activity() {
     if (body.isBlank()) return
     if (body.length > 4000) {
       Toast.makeText(this, "Message exceeds 4000 characters", Toast.LENGTH_LONG).show()
+      return
+    }
+    if (!chatBridgeLoaded) {
+      Toast.makeText(this, "Live AI replies require the published website bridge. Open ⋯ for full chat.", Toast.LENGTH_LONG).show()
       return
     }
     if (android.net.Uri.parse(web?.url).path != "/chat/" + thread.id ||
