@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.provider.ContactsContract
 import java.security.MessageDigest
 
 /**
@@ -50,11 +51,28 @@ object SmsNotification {
     manager(context)?.createNotificationChannel(NotificationChannel(id, name, importance))
   }
 
-  private fun openMessages(context: Context): PendingIntent {
-    val intent = Intent(context, WorldInboxActivity::class.java)
-      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-    return PendingIntent.getActivity(context, 0, intent,
+  private fun openMessages(context: Context, threadId: Long? = null,
+                           address: String? = null): PendingIntent {
+    val intent = if (threadId != null && threadId > 0)
+      Intent(context, SmsThreadActivity::class.java)
+        .putExtra("threadId", threadId).putExtra("address", address)
+    else Intent(context, WorldInboxActivity::class.java)
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    return PendingIntent.getActivity(context, threadId?.toInt() ?: 0, intent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+  }
+
+  private fun displayName(context: Context, address: String): String {
+    if (context.checkSelfPermission(Manifest.permission.READ_CONTACTS) !=
+        PackageManager.PERMISSION_GRANTED) return address
+    return try {
+      val uri = Uri.withAppendedPath(ContactsContract.PhoneLookup.CONTENT_FILTER_URI,
+        Uri.encode(address))
+      context.contentResolver.query(uri, arrayOf(ContactsContract.PhoneLookup.DISPLAY_NAME),
+        null, null, null)?.use { cursor ->
+          if (cursor.moveToFirst()) cursor.getString(0) else null
+      }?.takeIf { it.isNotBlank() } ?: address
+    } catch (_: Exception) { address }
   }
 
   // One stable notification per sender; never include the phone number in the intent URI.
@@ -95,19 +113,20 @@ object SmsNotification {
     ensureChannel(context, INCOMING, "Incoming text and picture messages",
       NotificationManager.IMPORTANCE_HIGH)
     val id = threadId?.takeIf { it > 0 }?.toInt() ?: senderId(address)
-    val sender = Person.Builder().setName(address).build()
+    val name = displayName(context, address)
+    val sender = Person.Builder().setName(name).build()
     val me = Person.Builder().setName("You").build()
     val style = Notification.MessagingStyle(me)
       .addMessage(body.take(2000), System.currentTimeMillis(), sender)
     val builder = Notification.Builder(context, INCOMING)
       .setSmallIcon(R.drawable.ic_notification_message)
-      .setContentTitle(address)
+      .setContentTitle(name)
       .setContentText(body.take(180))
       .setStyle(style)
       .setCategory(Notification.CATEGORY_MESSAGE)
       .setVisibility(Notification.VISIBILITY_PRIVATE)
       .setPublicVersion(genericPublicVersion(context))
-      .setContentIntent(openMessages(context))
+      .setContentIntent(openMessages(context, threadId, address))
       .setAutoCancel(true)
     // Only SMS-compatible numeric senders can receive an SMS quick reply.
     if (Regex("^\\+?[0-9() .-]{3,24}$").matches(address))
