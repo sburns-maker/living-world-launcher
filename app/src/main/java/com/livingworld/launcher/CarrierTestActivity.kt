@@ -18,6 +18,7 @@ import android.widget.Toast
  */
 class CarrierTestActivity : Activity() {
   private lateinit var status: TextView
+  private lateinit var sendResults: TextView
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -29,6 +30,9 @@ class CarrierTestActivity : Activity() {
       "Samsung Galaxy Z Fold6 / T-Mobile test build. Back up messages first. Switching the default SMS app redirects incoming SMS and MMS to this experimental app.", 15f, UiKit.ink))
     status = UiKit.text(this, "", 15f, UiKit.ink)
     root.addView(status)
+    root.addView(UiKit.clickable(this, "Refresh SMS carrier results") { refresh() })
+    sendResults = UiKit.text(this, "", 14f, UiKit.ink)
+    root.addView(sendResults)
     root.addView(UiKit.clickable(this, "1. Start controlled SMS/MMS test") { confirmRole() })
     root.addView(UiKit.clickable(this, "2. New test message") {
       startActivity(Intent(this, SmsComposeActivity::class.java))
@@ -63,6 +67,7 @@ class CarrierTestActivity : Activity() {
     val smsPermission = if (checkSelfPermission(Manifest.permission.SEND_SMS) ==
         android.content.pm.PackageManager.PERMISSION_GRANTED) "granted" else "missing"
     status.text = "Android SMS role: $role\nProvider default: $provider\nSEND_SMS permission: $smsPermission\nOutgoing test session: $sending\nPending MMS recovery entries: ${MmsRetryStore.pendingCount(this)}"
+    if (::sendResults.isInitialized) sendResults.text = SmsCarrierDiagnostics.summary(this)
 
   }
 
