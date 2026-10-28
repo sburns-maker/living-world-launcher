@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.ScrollView
 import android.widget.Toast
 
 /**
@@ -23,7 +24,9 @@ class CarrierTestActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     val root = UiKit.vertical(this, 18).apply { setBackgroundColor(UiKit.bg) }
-    setContentView(root)
+    val scroll = ScrollView(this)
+    scroll.addView(root)
+    setContentView(scroll)
     root.addView(UiKit.clickable(this, "‹  Messages") { finish() })
     root.addView(UiKit.text(this, "Carrier messaging test", 25f, UiKit.ink, true))
     root.addView(UiKit.text(this,
