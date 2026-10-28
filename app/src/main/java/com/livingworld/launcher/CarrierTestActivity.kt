@@ -52,9 +52,17 @@ class CarrierTestActivity : Activity() {
   }
 
   private fun refresh() {
-    val role = if (SmsRole.isDefault(this)) "Living World (test)" else "Google Messages or another app"
+    val detail = SmsRole.inspect(this)
+    val role = if (detail.roleHeld) "Living World (verified by Android)" else "Not held"
+    val provider = when (detail.telephonyDefault) {
+      null -> "not visible"
+      detail.ownPackage -> "Living World"
+      else -> "another messaging app"
+    }
     val sending = if (CarrierTestMode.enabled(this)) "enabled" else "off"
-    status.text = "Default SMS role: $role\nOutgoing test session: $sending\nPending MMS recovery entries: ${MmsRetryStore.pendingCount(this)}"
+    val smsPermission = if (checkSelfPermission(Manifest.permission.SEND_SMS) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED) "granted" else "missing"
+    status.text = "Android SMS role: $role\nProvider default: $provider\nSEND_SMS permission: $smsPermission\nOutgoing test session: $sending\nPending MMS recovery entries: ${MmsRetryStore.pendingCount(this)}"
 
   }
 
