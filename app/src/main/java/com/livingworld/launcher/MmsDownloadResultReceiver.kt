@@ -20,6 +20,7 @@ class MmsDownloadResultReceiver : BroadcastReceiver() {
     val token = intent.getStringExtra(EXTRA_TOKEN) ?: return
     if (!TOKEN.matches(token)) return
     val subscription = intent.getIntExtra(EXTRA_SUBSCRIPTION, -1)
+    val location = intent.getStringExtra(EXTRA_LOCATION) ?: return
     val staged = File(File(context.noBackupFilesDir, "mms_pending"), "$token.pdu")
     var persisted = false
     try {
@@ -43,6 +44,7 @@ class MmsDownloadResultReceiver : BroadcastReceiver() {
     } catch (e: Exception) {
       Log.e(TAG, "Unable to persist downloaded MMS", e)
     } finally {
+      MmsDownloadLedger.settle(context, subscription, location, persisted)
       // Retain a bounded failed payload for explicit recovery instead of discarding
       // a successfully downloaded message after a transient provider error.
       if (persisted && staged.exists()) staged.delete()
@@ -53,6 +55,7 @@ class MmsDownloadResultReceiver : BroadcastReceiver() {
     const val ACTION_RESULT = "com.livingworld.launcher.MMS_DOWNLOAD_RESULT"
     const val EXTRA_TOKEN = "downloadToken"
     const val EXTRA_SUBSCRIPTION = "downloadSubscription"
+    const val EXTRA_LOCATION = "downloadLocation"
     private const val TAG = "MmsDownloadResult"
     private const val MAX_BYTES = 5L * 1024 * 1024
     private val TOKEN = Regex("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
