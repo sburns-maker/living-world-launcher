@@ -1,6 +1,8 @@
 package com.livingworld.launcher
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.app.PendingIntent
 import android.content.ComponentName
 import android.provider.Settings
@@ -178,10 +180,17 @@ class WorldInboxActivity : Activity() {
       }
     }
     if (SmsRole.isDefault(this)) {
+      val contacts = ContactNameResolver.snapshot(this)
+      if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+        rows.addView(UiKit.clickable(this, "Show saved contact names") {
+          requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 210)
+        })
+        rows.addView(UiKit.gap(this, 8))
+      }
       SmsHistory.recent(this).forEach { sms ->
         val row = UiKit.horizontal(this)
         val content = UiKit.vertical(this, 8)
-        content.addView(UiKit.text(this, sms.address.ifBlank { "Unknown number" }, 17f, UiKit.ink, sms.unread))
+        content.addView(UiKit.text(this, ContactNameResolver.display(sms.address, contacts), 17f, UiKit.ink, sms.unread))
         content.addView(UiKit.text(this, sms.body, 13f, UiKit.muted).apply { maxLines = 2 })
         row.addView(content, LinearLayout.LayoutParams(-1, -2))
         row.isClickable = true
