@@ -109,6 +109,7 @@ class WorldInboxActivity : Activity() {
     // The game session stays loaded, without taking space from the scrollable inbox.
     browser.visibility = View.GONE
     root.addView(browser, LinearLayout.LayoutParams(-1, 0, 1f))
+    maybeRequestContacts()
   }
   private fun showNative() {
     showingConversation = false
@@ -120,7 +121,12 @@ class WorldInboxActivity : Activity() {
     worldThreads = threads
     rows.removeAllViews()
     if (threads.isEmpty()) {
-      rows.addView(UiKit.text(this, "Sign in below to load conversations.", 14f, UiKit.muted))
+      rows.addView(UiKit.clickable(this, "Sign in to Living World AI conversations") {
+        showingConversation = true
+        listPage.visibility = View.GONE
+        web?.visibility = View.VISIBLE
+        web?.loadUrl(WorldBackend.INBOX_URL)
+      })
     }
     for (t in threads) {
       val line = UiKit.horizontal(this)
@@ -213,6 +219,22 @@ class WorldInboxActivity : Activity() {
     })
     rows.addView(UiKit.clickable(this, "Open Google Messages") { openRealMessages() })
   }
+  private fun maybeRequestContacts() {
+    if (!SmsRole.isDefault(this)) return
+    if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) return
+    val preferences = getSharedPreferences("inbox_contact_permission", MODE_PRIVATE)
+    if (preferences.getBoolean("requested", false)) return
+    preferences.edit().putBoolean("requested", true).apply()
+    requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 210)
+  }
+
+  override fun onRequestPermissionsResult(
+    requestCode: Int, permissions: Array<out String>, grantResults: IntArray
+  ) {
+    super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+    if (requestCode == 210 && ::rows.isInitialized && !showingConversation) render(worldThreads)
+  }
+
   private fun openRealMessages() {
     val intent = packageManager.getLaunchIntentForPackage(GoogleMessagesBridge.GOOGLE_MESSAGES)
       ?: Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)
