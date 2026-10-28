@@ -2,6 +2,7 @@ package com.livingworld.launcher
 
 import android.Manifest
 import android.content.Context
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.provider.ContactsContract
 import android.telephony.PhoneNumberUtils
@@ -12,6 +13,7 @@ import android.telephony.PhoneNumberUtils
  * No contact data is uploaded or persisted by this resolver.
  */
 object ContactNameResolver {
+  data class Profile(val name: String, val photoUri: Uri?)
   private fun key(number: String): String? {
     val normalized = PhoneNumberUtils.normalizeNumber(number)
     val digits = normalized.filter { it.isDigit() }
@@ -21,34 +23,43 @@ object ContactNameResolver {
     return normalized.takeIf { it.length >= 5 }
   }
 
-  fun snapshot(context: Context): Map<String, String> {
+  fun snapshot(context: Context): Map<String, String> =
+    snapshotProfiles(context).mapValues { it.value.name }
+
+  fun snapshotProfiles(context: Context): Map<String, Profile> {
     if (context.checkSelfPermission(Manifest.permission.READ_CONTACTS) !=
       PackageManager.PERMISSION_GRANTED) return emptyMap()
-    val result = LinkedHashMap<String, String>()
+    val result = LinkedHashMap<String, Profile>()
     try {
       context.contentResolver.query(
         ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
         arrayOf(
           ContactsContract.CommonDataKinds.Phone.NUMBER,
-          ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME
-        ),
-        null, null, null
+          ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+          ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI
+        ), null, null, null
       )?.use { cursor ->
         val number = cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
         val name = cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+        val photo = cursor.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI)
         var rows = 0
         while (cursor.moveToNext() && rows++ < 10000) {
           val label = cursor.getString(name)?.trim().orEmpty()
           val phone = cursor.getString(number) ?: continue
           val match = key(phone) ?: continue
-          if (label.isNotBlank()) result.putIfAbsent(match, label)
+          if (label.isNotBlank()) {
+            val uri = cursor.getString(photo)?.let(Uri::parse)
+              ?.takeIf { it.scheme == "content" }
+            result.putIfAbsent(match, Profile(label, uri))
+          }
         }
       }
-    } catch (_: Exception) {
-      // Contacts access is optional; raw numbers remain readable.
-    }
+    } catch (_: Exception) { /* Real contacts are optional. */ }
     return result
   }
+
+  fun photo(address: String, profiles: Map<String, Profile>): Uri? =
+    key(address)?.let { profiles[it]?.photoUri }
 
   fun display(address: String, names: Map<String, String>): String {
     if (address.isBlank()) return "Unknown number"
