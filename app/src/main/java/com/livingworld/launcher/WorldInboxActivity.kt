@@ -74,7 +74,13 @@ class WorldInboxActivity : Activity() {
     header.addView(UiKit.clickable(this, "✎") { startActivity(Intent(this, SmsComposeActivity::class.java)) })
     listPage.addView(header)
     rows = UiKit.vertical(this)
-    listPage.addView(rows)
+    val conversationScroll = ScrollView(this).apply {
+      isFillViewport = true
+      isVerticalScrollBarEnabled = true
+      overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+    }
+    conversationScroll.addView(rows)
+    listPage.addView(conversationScroll, LinearLayout.LayoutParams(-1, 0, 1f))
     root.addView(listPage, LinearLayout.LayoutParams(-1, 0, 1f))
     rows.addView(UiKit.text(this, "Connecting to conversations…", 14f, UiKit.muted))
     renderRealNotifications()
@@ -98,7 +104,8 @@ class WorldInboxActivity : Activity() {
       loadUrl(WorldBackend.INBOX_URL)
     }
     web = browser
-    // Visible until the authenticated inbox publishes the native snapshot.
+    // The game session stays loaded, without taking space from the scrollable inbox.
+    browser.visibility = View.GONE
     root.addView(browser, LinearLayout.LayoutParams(-1, 0, 1f))
   }
   private fun showNative() {
