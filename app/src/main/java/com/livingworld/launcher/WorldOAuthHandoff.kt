@@ -94,7 +94,7 @@ object WorldOAuthHandoff {
     require(pubData.size in 60..120) { "Invalid browser public key" }
     val publicKey = KeyFactory.getInstance("EC")
       .generatePublic(X509EncodedKeySpec(pubData))
-    val agreement = KeyAgreement.getInstance("ECDH")
+    val agreement = KeyAgreement.getInstance("ECDH", "AndroidKeyStore")
     agreement.init(key)
     agreement.doPhase(publicKey, true)
     val shared = agreement.generateSecret()
