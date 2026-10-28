@@ -66,7 +66,11 @@ class WorldInboxActivity : Activity() {
         }
         items
       } catch (_: Exception) { return }
-      runOnUiThread { render(parsed) }
+      runOnUiThread {
+        worldAuthenticated = true
+        if (signingIn) showNative()
+        render(parsed)
+      }
     }
     @JavascriptInterface fun receiveMessages(json: String) {
       if (json.length > 250000) return
@@ -179,19 +183,93 @@ class WorldInboxActivity : Activity() {
   }
   private fun showNative() {
     showingConversation = false
+    signingIn = false
+    selectedWorldThread = null
+    chatPage.visibility = View.GONE
     listPage.visibility = View.VISIBLE
     web?.visibility = View.GONE
     web?.loadUrl(WorldBackend.INBOX_URL)
+  }
+  private fun showBrowser(url: String) {
+    showingConversation = true
+    signingIn = true
+    listPage.visibility = View.GONE
+    chatPage.visibility = View.GONE
+    web?.visibility = View.VISIBLE
+    web?.loadUrl(url)
+  }
+  private fun openNativeWorldChat(thread: Thread) {
+    selectedWorldThread = thread
+    showingConversation = true
+    signingIn = false
+    listPage.visibility = View.GONE
+    chatPage.visibility = View.VISIBLE
+    web?.visibility = View.GONE
+    aiComposer.setText("")
+    aiStatus.text = "Loading messages…"
+    chatMessages.removeAllViews()
+    val header = chatPage.getChildAt(0) as? LinearLayout
+    (header?.getChildAt(1) as? android.widget.TextView)?.text = thread.name
+    web?.loadUrl(WorldBackend.ORIGIN + "/chat/" + thread.id)
+  }
+  private fun sendAiText() {
+    val thread = selectedWorldThread ?: return
+    val body = aiComposer.text.toString().trim()
+    if (body.isBlank()) return
+    if (body.length > 4000) {
+      Toast.makeText(this, "Message exceeds 4000 characters", Toast.LENGTH_LONG).show()
+      return
+    }
+    if (android.net.Uri.parse(web?.url).path != "/chat/" + thread.id ||
+      !WorldBackend.isAllowed(web?.url.orEmpty())) {
+      Toast.makeText(this, "AI chat is still loading. Your text has not sent.",
+        Toast.LENGTH_LONG).show()
+      return
+    }
+    val id = JSONObject.quote(thread.id)
+    val safeText = JSONObject.quote(body)
+    val js = "(function(){if(window.__livingWorldNativeChatReady!==" + id +
+      ")return 'not-ready';window.dispatchEvent(new CustomEvent(" +
+      "'living-world-native-send',{detail:{conversationId:" + id +
+      ",text:" + safeText + "}}));return 'accepted';})()"
+    web?.evaluateJavascript(js) { result ->
+      if (result == "\"accepted\"") {
+        aiComposer.setText("")
+        aiStatus.text = "Sending through Living World…"
+      } else {
+        Toast.makeText(this, "AI chat not ready. Message was not submitted.",
+          Toast.LENGTH_LONG).show()
+      }
+    }
+  }
+  private fun renderAiMessages(messages: List<WorldMessage>) {
+    chatMessages.removeAllViews()
+    messages.forEach { message ->
+      if (message.text.isBlank()) return@forEach
+      val row = UiKit.horizontal(this).apply {
+        gravity = if (message.outgoing) Gravity.END else Gravity.START
+      }
+      val bubble = UiKit.text(this, message.text, 16f, UiKit.ink).apply {
+        setPadding(UiKit.dp(this@WorldInboxActivity, 12), UiKit.dp(this@WorldInboxActivity, 9),
+          UiKit.dp(this@WorldInboxActivity, 12), UiKit.dp(this@WorldInboxActivity, 9))
+        background = UiKit.surface(this@WorldInboxActivity,
+          if (message.outgoing) Color.rgb(220, 233, 254) else Color.WHITE)
+        maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
+      }
+      row.addView(bubble)
+      chatMessages.addView(row)
+      chatMessages.addView(UiKit.gap(this, 6))
+    }
+    aiStatus.text = "Living World • synchronized"
+    chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
   }
   private fun render(threads: List<Thread>) {
     worldThreads = threads
     rows.removeAllViews()
     if (threads.isEmpty()) {
-      rows.addView(UiKit.clickable(this, "Sign in to Living World AI conversations") {
-        showingConversation = true
-        listPage.visibility = View.GONE
-        web?.visibility = View.VISIBLE
-        web?.loadUrl(WorldBackend.INBOX_URL)
+      rows.addView(UiKit.clickable(this,
+        if (worldAuthenticated) "No AI conversations yet" else "Connect Living World AI conversations") {
+        if (!worldAuthenticated) showBrowser(WorldBackend.INBOX_URL)
       })
     }
     for (t in threads) {
@@ -204,12 +282,7 @@ class WorldInboxActivity : Activity() {
       detail.addView(UiKit.text(this, t.name + if(t.unread > 0) "  • ${t.unread}" else "", 17f, UiKit.ink, t.unread > 0))
       detail.addView(UiKit.text(this, t.preview, 13f, UiKit.muted).apply { maxLines = 2 })
       line.addView(detail, LinearLayout.LayoutParams(0, -2, 1f))
-      line.setOnClickListener {
-        showingConversation = true
-        listPage.visibility = View.GONE
-        web?.visibility = View.VISIBLE
-        web?.loadUrl(WorldBackend.ORIGIN + "/chat/" + t.id)
-      }
+      line.setOnClickListener { openNativeWorldChat(t) }
       rows.addView(line)
       rows.addView(UiKit.gap(this, 14))
     }
