@@ -171,6 +171,16 @@ class WorldInboxActivity : Activity() {
             startActivity(Intent(Intent.ACTION_VIEW, uri)); true
           } catch (_: Exception) { true }
         }
+        override fun onPageFinished(view: WebView?, url: String?) {
+          super.onPageFinished(view, url)
+          if (!signingIn || selectedWorldThread != null ||
+              !WorldBackend.isAllowed(url.orEmpty())) return
+          val path = Uri.parse(url).path.orEmpty()
+          if (path != "/auth" && path != "/login" && path != "/inbox" &&
+              !path.startsWith("/chat/")) {
+            view?.post { if (signingIn) view.loadUrl(WorldBackend.INBOX_URL) }
+          }
+        }
       }
       webChromeClient = WebChromeClient()
       loadUrl(WorldBackend.INBOX_URL)
@@ -275,7 +285,8 @@ class WorldInboxActivity : Activity() {
     for (t in threads) {
       val line = UiKit.horizontal(this)
       val picture = ImageView(this)
-      picture.setBackgroundColor(android.graphics.Color.rgb(237,232,250))
+      picture.background = UiKit.surface(this, android.graphics.Color.rgb(237,232,250), 50)
+      picture.clipToOutline = true
       line.addView(picture, LinearLayout.LayoutParams(UiKit.dp(this, 52), UiKit.dp(this, 52)))
       loadPhoto(picture, t.photo)
       val detail = UiKit.vertical(this, 10)
