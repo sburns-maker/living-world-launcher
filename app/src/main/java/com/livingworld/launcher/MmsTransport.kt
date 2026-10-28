@@ -51,6 +51,7 @@ object MmsTransport {
           .setExplicitBroadcastForSentMms(callback)
           .sendNewMessage(message)
         MmsSendLedger.update(context, token, "SUBMITTED_TO_ANDROID")
+        SmsNotification.submitted(context, "MMS", token.hashCode())
       } catch (error: Exception) {
         MmsSendLedger.update(context, token, "REQUEST_FAILED")
         throw error
