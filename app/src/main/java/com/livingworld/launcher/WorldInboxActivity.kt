@@ -35,7 +35,7 @@ import java.util.concurrent.Executors
  */
 class WorldInboxActivity : Activity() {
   private data class Thread(val id: String, val name: String, val preview: String, val photo: String, val unread: Int)
-  private data class WorldMessage(val id: String, val text: String, val outgoing: Boolean, val at: Long)
+  private data class WorldMessage(val id: String, val text: String, val outgoing: Boolean, val at: Long, val photo: String)
   private var web: WebView? = null
   private lateinit var rows: LinearLayout
   private lateinit var listPage: LinearLayout
@@ -84,7 +84,8 @@ class WorldInboxActivity : Activity() {
           val messageId = row.optString("id")
           if (!Regex("^[a-fA-F0-9-]{36}$").matches(messageId)) return@mapNotNull null
           WorldMessage(messageId, row.optString("text").take(4000),
-            row.optBoolean("outgoing"), row.optLong("timestamp"))
+            row.optBoolean("outgoing"), row.optLong("timestamp"),
+            row.optString("photo").take(2000))
         }
         Pair(id, parsed)
       } catch (_: Exception) { return }
@@ -255,7 +256,7 @@ class WorldInboxActivity : Activity() {
   private fun renderAiMessages(messages: List<WorldMessage>) {
     chatMessages.removeAllViews()
     messages.forEach { message ->
-      if (message.text.isBlank()) return@forEach
+      if (message.text.isBlank() && message.photo.isBlank()) return@forEach
       val row = UiKit.horizontal(this).apply {
         gravity = if (message.outgoing) Gravity.END else Gravity.START
       }
@@ -266,7 +267,21 @@ class WorldInboxActivity : Activity() {
           if (message.outgoing) Color.rgb(220, 233, 254) else Color.WHITE)
         maxWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
       }
-      row.addView(bubble)
+      if (message.photo.isNotBlank()) {
+        val media = ImageView(this).apply {
+          adjustViewBounds = true
+          maxWidth = UiKit.dp(this@WorldInboxActivity, 245)
+          maxHeight = UiKit.dp(this@WorldInboxActivity, 320)
+          scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        val container = UiKit.vertical(this, 5).apply {
+          gravity = if (message.outgoing) Gravity.END else Gravity.START
+        }
+        loadAiPhoto(media, message.photo)
+        container.addView(media)
+        if (message.text.isNotBlank()) container.addView(bubble)
+        row.addView(container)
+      } else row.addView(bubble)
       chatMessages.addView(row)
       chatMessages.addView(UiKit.gap(this, 6))
     }
@@ -427,6 +442,41 @@ class WorldInboxActivity : Activity() {
       }
     }
     return avatar
+  }
+
+  private fun loadAiPhoto(view: ImageView, url: String) {
+    val resolved = if (url.startsWith("/")) WorldBackend.ORIGIN + url else url
+    val uri = Uri.parse(resolved)
+    if (uri.scheme != "https" || uri.host.isNullOrBlank()) return
+    pictures.execute {
+      try {
+        val connection = URL(resolved).openConnection() as HttpURLConnection
+        connection.connectTimeout = 6500
+        connection.readTimeout = 6500
+        connection.instanceFollowRedirects = false
+        if (connection.responseCode != 200 || connection.contentLengthLong > 4000000) {
+          connection.disconnect()
+          return@execute
+        }
+        val bytes = connection.inputStream.use { input ->
+          val output = java.io.ByteArrayOutputStream()
+          val buffer = ByteArray(8192)
+          while (output.size() <= 4000000) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            output.write(buffer, 0, count)
+          }
+          output.toByteArray()
+        }
+        connection.disconnect()
+        if (bytes.size > 4000000) return@execute
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
+          BitmapFactory.Options().apply { inSampleSize = 4 }) ?: return@execute
+        runOnUiThread {
+          if (!isFinishing && !isDestroyed) view.setImageBitmap(bitmap)
+        }
+      } catch (_: Exception) { }
+    }
   }
 
   private fun loadPhoto(view: ImageView, url: String) {
