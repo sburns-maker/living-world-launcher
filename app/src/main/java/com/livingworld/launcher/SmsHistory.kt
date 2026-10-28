@@ -10,11 +10,33 @@ import android.provider.Telephony
  * must be implemented and tested before replacing a working daily-driver SMS app.
  */
 object SmsRole {
-  fun isDefault(context: Context): Boolean {
-    val manager = context.getSystemService(RoleManager::class.java)
-    return manager?.isRoleHeld(RoleManager.ROLE_SMS) == true &&
-      Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+  data class Status(
+    val roleHeld: Boolean,
+    val roleAvailable: Boolean,
+    val telephonyDefault: String?,
+    val ownPackage: String
+  ) {
+    val telephonyMatches: Boolean get() = telephonyDefault == ownPackage
+    val isDefault: Boolean get() = roleHeld
   }
+
+  /**
+   * RoleManager is authoritative on Android 10+. Telephony's package lookup
+   * is diagnostic only because OEM package visibility can return null even
+   * when the role is held. Never infer the role from SMS runtime permissions.
+   */
+  fun inspect(context: Context): Status {
+    val manager = context.getSystemService(RoleManager::class.java)
+    val held = try { manager?.isRoleHeld(RoleManager.ROLE_SMS) == true }
+      catch (_: Exception) { false }
+    val available = try { manager?.isRoleAvailable(RoleManager.ROLE_SMS) == true }
+      catch (_: Exception) { false }
+    val smsPackage = try { Telephony.Sms.getDefaultSmsPackage(context) }
+      catch (_: Exception) { null }
+    return Status(held, available, smsPackage, context.packageName)
+  }
+
+  fun isDefault(context: Context): Boolean = inspect(context).isDefault
 }
 
 data class SmsSummary(val threadId: Long, val address: String, val body: String, val timestamp: Long, val unread: Boolean)
