@@ -6,7 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.Telephony
-import android.telephony.SmsManager
 import android.util.Log
 import com.google.android.mms.pdu_alt.PduParser
 import com.google.android.mms.pdu_alt.PduPersister
@@ -22,6 +21,7 @@ class MmsDownloadResultReceiver : BroadcastReceiver() {
     if (!TOKEN.matches(token)) return
     val subscription = intent.getIntExtra(EXTRA_SUBSCRIPTION, -1)
     val staged = File(File(context.noBackupFilesDir, "mms_pending"), "$token.pdu")
+    var persisted = false
     try {
       if (resultCode != Activity.RESULT_OK) {
         Log.w(TAG, "MMS carrier download failed, code=$resultCode")
@@ -38,11 +38,14 @@ class MmsDownloadResultReceiver : BroadcastReceiver() {
       val result: Uri = PduPersister.getPduPersister(context).persist(
         decoded, Telephony.Mms.Inbox.CONTENT_URI, true, true, HashMap(), subscription
       )
+      persisted = true
       Log.i(TAG, "MMS stored in system provider")
     } catch (e: Exception) {
       Log.e(TAG, "Unable to persist downloaded MMS", e)
     } finally {
-      if (staged.exists()) staged.delete()
+      // Retain a bounded failed payload for explicit recovery instead of discarding
+      // a successfully downloaded message after a transient provider error.
+      if (persisted && staged.exists()) staged.delete()
     }
   }
 
