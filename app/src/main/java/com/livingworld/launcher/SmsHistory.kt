@@ -45,6 +45,55 @@ object SmsHistory {
         }
       }
     } catch (_: SecurityException) { return emptyList() }
-    return results.values.toList()
+    // MMS-only and new group conversations must appear even without an SMS row.
+    val mmsColumns = arrayOf(
+      Telephony.Mms._ID, Telephony.Mms.THREAD_ID, Telephony.Mms.DATE,
+      Telephony.Mms.READ, Telephony.Mms.MESSAGE_BOX
+    )
+    try {
+      context.contentResolver.query(Telephony.Mms.CONTENT_URI, mmsColumns, null, null,
+        "${Telephony.Mms.DATE} DESC")?.use { cursor ->
+        val idCol = cursor.getColumnIndexOrThrow(Telephony.Mms._ID)
+        val threadCol = cursor.getColumnIndexOrThrow(Telephony.Mms.THREAD_ID)
+        val dateCol = cursor.getColumnIndexOrThrow(Telephony.Mms.DATE)
+        val readCol = cursor.getColumnIndexOrThrow(Telephony.Mms.READ)
+        val boxCol = cursor.getColumnIndexOrThrow(Telephony.Mms.MESSAGE_BOX)
+        var scanned = 0
+        while (cursor.moveToNext() && scanned++ < 160) {
+          val threadId = cursor.getLong(threadCol)
+          if (threadId < 0) continue
+          val timestamp = cursor.getLong(dateCol) * 1000L
+          if ((results[threadId]?.timestamp ?: 0L) >= timestamp) continue
+          val messageId = cursor.getLong(idCol)
+          val incoming = cursor.getInt(boxCol) == Telephony.Mms.MESSAGE_BOX_INBOX
+          results[threadId] = SmsSummary(
+            threadId, mmsSender(context, messageId, incoming),
+            "Picture or group message", timestamp, cursor.getInt(readCol) == 0
+          )
+        }
+      }
+    } catch (_: Exception) { /* Preserve SMS history when a carrier MMS query fails. */ }
+    return results.values.sortedByDescending { it.timestamp }.take(limit)
+  }
+
+  private fun mmsSender(context: Context, messageId: Long, incoming: Boolean): String {
+    val addresses = mutableListOf<String>()
+    try {
+      context.contentResolver.query(
+        android.net.Uri.parse("content://mms/$messageId/addr"),
+        arrayOf("address", "type"), null, null, null
+      )?.use { cursor ->
+        val addressColumn = cursor.getColumnIndexOrThrow("address")
+        val typeColumn = cursor.getColumnIndexOrThrow("type")
+        while (cursor.moveToNext()) {
+          val kind = cursor.getInt(typeColumn)
+          val address = cursor.getString(addressColumn) ?: continue
+          if (address == "insert-address-token" || address.isBlank()) continue
+          if ((incoming && kind == 137) || (!incoming && kind == 151))
+            addresses.add(address)
+        }
+      }
+    } catch (_: Exception) { }
+    return addresses.take(3).joinToString(", ").ifBlank { "MMS conversation" }
   }
 }
