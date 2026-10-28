@@ -36,6 +36,7 @@ class SmsSentResultReceiver : BroadcastReceiver() {
       } catch (e: Exception) {
         Log.e(TAG, "Unable to commit SMS send state", e)
       }
+      SmsNotification.outgoing(context, "SMS", final, messageId.toInt())
     }
   }
   companion object {
