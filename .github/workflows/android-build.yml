@@ -46,20 +46,30 @@ jobs:
       - name: Load persistent test signing key (if configured)
         shell: bash
         env:
+          LW_TEST_SIGNING_PASSWORD: ${{ secrets.LW_TEST_SIGNING_PASSWORD }}
           LW_TEST_SIGNING_BUNDLE: ${{ secrets.LW_TEST_SIGNING_BUNDLE }}
         run: |
           set -euo pipefail
-          if [ -z "$LW_TEST_SIGNING_BUNDLE" ]; then
-            echo "Stable test-signing secret not configured; APK publication disabled." >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$LW_TEST_SIGNING_PASSWORD" ] && [ -z "$LW_TEST_SIGNING_BUNDLE" ]; then
+            echo "Stable test signing not configured; APK publication disabled." >> "$GITHUB_STEP_SUMMARY"
           else
             umask 077
             DIR="$RUNNER_TEMP/living-world-test-signing"
             mkdir -p "$DIR"
-            printf '%s' "$LW_TEST_SIGNING_BUNDLE" | base64 --decode > "$DIR/signing.zip"
+            if [ -n "$LW_TEST_SIGNING_PASSWORD" ]; then
+              # The repository contains only an AES-256 encrypted keystore archive.
+              # GitHub Actions is the sole holder of the decryption password.
+              openssl enc -d -aes-256-cbc -pbkdf2 -iter 250000 -salt -a \
+                -in ci/android-test-signing.enc.b64 -out "$DIR/signing.zip" \
+                -pass env:LW_TEST_SIGNING_PASSWORD
+            else
+              printf '%s' "$LW_TEST_SIGNING_BUNDLE" | base64 --decode > "$DIR/signing.zip"
+            fi
+            unzip -tq "$DIR/signing.zip" >/dev/null
             unzip -j -q "$DIR/signing.zip" test-signing.p12 signing.properties -d "$DIR"
             rm -f "$DIR/signing.zip"
             echo "LIVING_WORLD_TEST_SIGNING_DIR=$DIR" >> "$GITHUB_ENV"
-            echo "Build uses persistent Android test signature." >> "$GITHUB_STEP_SUMMARY"
+            echo "Build uses permanent encrypted Android test signature." >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Compile debug APK
         run: gradle --no-daemon :app:assembleDebug
