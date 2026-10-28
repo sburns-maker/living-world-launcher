@@ -67,6 +67,22 @@ object SmsNotification {
     catch (_: SecurityException) { /* Samsung permission may have been revoked */ }
   }
 
+  /** A submission acknowledgement is not a carrier sent or delivered confirmation. */
+  fun submitted(context: Context, transport: String, id: Int) {
+    if (!SmsRole.isDefault(context) || !canPost(context)) return
+    ensureChannel(context, RESULTS, "Carrier send results",
+      NotificationManager.IMPORTANCE_DEFAULT)
+    val notification = Notification.Builder(context, RESULTS)
+      .setSmallIcon(android.R.drawable.ic_dialog_email)
+      .setContentTitle("$transport submitted to Android")
+      .setContentText("Carrier confirmation pending. This does not mean delivered.")
+      .setContentIntent(openMessages(context))
+      .setAutoCancel(true)
+      .build()
+    try { manager(context)?.notify(id, notification) }
+    catch (_: SecurityException) { }
+  }
+
   /** "Sent" here is a send confirmation, NOT proof of delivery to recipient. */
   fun outgoing(context: Context, transport: String, success: Boolean, id: Int) {
     if (!SmsRole.isDefault(context) || !canPost(context)) return
