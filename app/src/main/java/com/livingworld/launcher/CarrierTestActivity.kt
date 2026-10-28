@@ -52,9 +52,10 @@ class CarrierTestActivity : Activity() {
   }
 
   private fun refresh() {
-    status.text = "Default SMS role: " + if (SmsRole.isDefault(this)) "Living World (test)" else "Another app" +
-      "\nOutgoing test session: " + if (CarrierTestMode.enabled(this)) "enabled" else "off" +
-      "\nPending MMS recovery entries: " + MmsRetryStore.pendingCount(this)
+    val role = if (SmsRole.isDefault(this)) "Living World (test)" else "Google Messages or another app"
+    val sending = if (CarrierTestMode.enabled(this)) "enabled" else "off"
+    status.text = "Default SMS role: $role\nOutgoing test session: $sending\nPending MMS recovery entries: ${MmsRetryStore.pendingCount(this)}"
+
   }
 
   private fun confirmRole() {
