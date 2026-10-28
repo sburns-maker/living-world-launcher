@@ -55,6 +55,7 @@ class SmsThreadActivity : Activity() {
         gravity = if (m.second) Gravity.END else Gravity.START
         addView(bubble)
       }
+      MmsHistory.messages(this, id).firstOrNull { it.timestampMillis == m.first }?.mediaParts?.firstOrNull()?.let { part -> MmsThumbnail.view(this, part)?.let { line.addView(it) } }
       stack.addView(line)
       stack.addView(UiKit.gap(this, 5))
     }
