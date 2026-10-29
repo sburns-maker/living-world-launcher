@@ -44,7 +44,7 @@ object WorldImageLoader {
     val resolved = resolve(link) ?: return null
     var target = URL(resolved)
     for (step in 0..3) {
-      if (target.protocol != "https" || target.userInfo != null ||
+      if (target.protocol != "https" || target.toURI().userInfo != null ||
           (target.port != -1 && target.port != 443)) return null
       val connection = (target.openConnection() as HttpURLConnection).apply {
         connectTimeout = 8000
