@@ -3,6 +3,17 @@ package com.livingworld.launcher
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.WallpaperManager
+import android.graphics.BitmapFactory
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
+import android.os.Build
+import android.view.WindowInsets
+import android.widget.HorizontalScrollView
+import android.widget.TextClock
+import android.view.ViewGroup
+import android.widget.Button
+import java.io.File
+import java.io.FileOutputStream
 import android.content.Intent
 import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
@@ -46,16 +57,31 @@ class LauncherActivity : Activity() {
   private val launcher by lazy { getSystemService(LauncherApps::class.java) }
   private val prefs by lazy { getSharedPreferences("living_world_home_v1", MODE_PRIVATE) }
   private val handler = Handler(Looper.getMainLooper())
+  private val widgets by lazy { HomeWidgets(this, prefs) }
+  private var homePage = 0
+  private var drawerIndex = 0
+  private var drawerScroller: HorizontalScrollView? = null
+  private var drawerPages = 0
+  private var drawerDots: TextView? = null
   private var page = Page.HOME
   private var clock: TextView? = null
   private var date: TextView? = null
   private var filter = ""
+  private val REQUEST_WALLPAPER = 7401
   private val refreshClock = object : Runnable {
     override fun run() {
       clock?.text = SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())
       date?.text = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())
       handler.postDelayed(this, 30_000L)
     }
+  }
+
+  private fun pageCount() = prefs.getInt("home_page_count", 1).coerceIn(1, 6)
+  private fun pinKey(page: Int, slot: Int) =
+    if (page == 0) "pinned_" + slot else "pinned_page_" + page + "_" + slot
+  private fun pageSlots(page: Int) = if (page == 0) 4 else 8
+  private fun rememberPage() {
+    prefs.edit().putInt("current_home_page", homePage).apply()
   }
 
   private fun dp(n: Int) = UiKit.dp(this, n)
@@ -82,6 +108,10 @@ class LauncherActivity : Activity() {
     window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
       WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
     filter = savedInstanceState?.getString("drawerFilter").orEmpty()
+    homePage = savedInstanceState?.getInt("homePage")
+      ?: prefs.getInt("current_home_page", 0)
+    homePage = homePage.coerceIn(0, pageCount() - 1)
+    drawerIndex = savedInstanceState?.getInt("drawerIndex") ?: 0
     when (savedInstanceState?.getString("page")) {
       "APPS" -> showApps(false)
       "MORE" -> showMore()
@@ -91,7 +121,28 @@ class LauncherActivity : Activity() {
   override fun onSaveInstanceState(outState: Bundle) {
     outState.putString("page", page.name)
     outState.putString("drawerFilter", filter)
+    outState.putInt("homePage", homePage)
+    outState.putInt("drawerIndex", drawerIndex)
     super.onSaveInstanceState(outState)
+  }
+  override fun onStart() {
+    super.onStart()
+    widgets.start()
+  }
+  override fun onStop() {
+    widgets.stop()
+    super.onStop()
+  }
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+    super.onActivityResult(requestCode, resultCode, data)
+    if (requestCode == HomeWidgets.REQUEST_BIND ||
+        requestCode == HomeWidgets.REQUEST_CONFIGURE) {
+      widgets.onResult(requestCode, resultCode, data)
+      showHome()
+    } else if (requestCode == REQUEST_WALLPAPER && resultCode == RESULT_OK) {
+      val uri = data?.data ?: return
+      importWallpaper(uri)
+    }
   }
   override fun onResume() {
     super.onResume()
@@ -105,6 +156,7 @@ class LauncherActivity : Activity() {
   override fun onNewIntent(intent: Intent?) {
     super.onNewIntent(intent)
     hideKeyboard()
+    homePage = 0
     showHome()
   }
   @Deprecated("Deprecated in Java")
