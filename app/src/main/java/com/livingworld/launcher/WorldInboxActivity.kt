@@ -655,9 +655,30 @@ class WorldInboxActivity : Activity() {
     }
   }
   private fun renderAiMessages(messages: List<WorldMessage>) {
+    // The web bridge publishes text immediately and photos later, and can
+    // repeat the same snapshot. Never delete/rebuild bubbles for identical data.
+    val fingerprint = messages.fold(17) { hash, message ->
+      (((hash * 31 + message.id.hashCode()) * 31 + message.text.hashCode()) *
+        31 + message.photo.hashCode()) * 31 + (if (message.outgoing) 1 else 0)
+    }
+    val status = if (chatBridgeLoaded) "Living World • synchronized"
+      else "Preview only · Full chat available under ⋯"
+    if (lastChatSignature == fingerprint) {
+      aiStatus.text = status
+      return
+    }
+
+    val firstLoad = lastChatSignature == null
+    val previousPosition = chatScroll.scrollY
+    val remainingDistance = chatMessages.height - previousPosition - chatScroll.height
+    // If someone is reading an earlier part of the chat, do not yank them back
+    // to the bottom when the world tick, query refresh, or photo sync arrives.
+    val followLatest = firstLoad || remainingDistance <= UiKit.dp(this, 72)
+    lastChatSignature = fingerprint
+
     chatMessages.removeAllViews()
-    messages.forEach { message ->
-      if (message.text.isBlank() && message.photo.isBlank()) return@forEach
+    for (message in messages) {
+      if (message.text.isBlank() && message.photo.isBlank()) continue
       val row = UiKit.horizontal(this).apply {
         gravity = if (message.outgoing) Gravity.END else Gravity.START
       }
@@ -670,24 +691,31 @@ class WorldInboxActivity : Activity() {
       }
       if (message.photo.isNotBlank()) {
         val media = ImageView(this).apply {
-          adjustViewBounds = true
-          maxWidth = UiKit.dp(this@WorldInboxActivity, 245)
-          maxHeight = UiKit.dp(this@WorldInboxActivity, 320)
+          adjustViewBounds = false
           scaleType = ImageView.ScaleType.FIT_CENTER
+          background = UiKit.surface(this@WorldInboxActivity,
+            Color.rgb(239, 236, 245), 14)
         }
         val container = UiKit.vertical(this, 5).apply {
           gravity = if (message.outgoing) Gravity.END else Gravity.START
         }
+        // Reserve space *before* an asynchronous image loads. Otherwise the
+        // image forces the whole scroll view to jump while someone is reading.
+        container.addView(media, LinearLayout.LayoutParams(
+          UiKit.dp(this, 235), UiKit.dp(this, 235)))
         loadAiPhoto(media, message.photo)
-        container.addView(media)
         if (message.text.isNotBlank()) container.addView(bubble)
         row.addView(container)
       } else row.addView(bubble)
       chatMessages.addView(row)
       chatMessages.addView(UiKit.gap(this, 6))
     }
-    aiStatus.text = "Living World • synchronized"
-    chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
+    aiStatus.text = status
+    chatScroll.post {
+      if (isFinishing || isDestroyed || !showingConversation) return@post
+      if (followLatest) chatScroll.fullScroll(View.FOCUS_DOWN)
+      else chatScroll.scrollTo(0, previousPosition)
+    }
   }
   private fun render(threads: List<Thread>) {
     worldThreads = threads
