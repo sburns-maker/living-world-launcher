@@ -180,6 +180,7 @@ class LauncherActivity : Activity() {
     "contacts" -> Shortcut(name, "Contacts", getDrawable(R.drawable.ic_contacts), tint(67, 122, 202))
     "apps" -> Shortcut(name, "Apps", getDrawable(R.drawable.ic_apps), tint(102, 88, 151))
     "more" -> Shortcut(name, "More", getDrawable(R.drawable.ic_more), tint(96, 101, 120))
+    "empty" -> Shortcut(name, "+ Add", null, tint(57, 63, 92, 180))
     else -> Shortcut("settings", "Settings", getDrawable(R.drawable.ic_settings), tint(88, 99, 126))
   }
   private fun resolve(id: String, list: List<LauncherActivityInfo>): Shortcut {
@@ -198,6 +199,7 @@ class LauncherActivity : Activity() {
       "contacts" -> startActivity(Intent(this, UnifiedContactsActivity::class.java))
       "apps" -> showApps(false)
       "more" -> showMore()
+      "empty" -> pickPinned(0)
       "settings" -> startActivity(Intent(Settings.ACTION_SETTINGS))
       else -> {
         val app = installed().firstOrNull {
@@ -468,19 +470,27 @@ class LauncherActivity : Activity() {
     else -> "settings"
   }
   private fun pickPinned(index: Int) {
-    val all = listOf("world", "phone", "messages", "contacts", "settings", "apps")
-      .map(::builtIn) + installed().map(::systemApp)
-    AlertDialog.Builder(this).setTitle("Choose home shortcut")
-      .setItems(all.map { it.label }.toTypedArray()) { _, selected ->
-        prefs.edit().putString("pinned_" + index, all[selected].id).apply()
+    val choices = listOf("world", "phone", "messages", "contacts", "settings", "apps")
+      .map(::builtIn) + installed().map(::systemApp) + builtIn("empty")
+    AlertDialog.Builder(this).setTitle("Home page " + (homePage + 1) + " · Slot " + (index + 1))
+      .setItems(choices.map { it.label }.toTypedArray()) { _, selected ->
+        prefs.edit().putString(pinKey(homePage, index), choices[selected].id).apply()
         showHome()
       }.setNegativeButton("Cancel", null).show()
   }
   private fun pinApp(item: Shortcut) {
-    val labels = arrayOf("Shortcut 1", "Shortcut 2", "Shortcut 3", "Shortcut 4")
+    val choices = (0 until pageCount()).flatMap { index ->
+      (0 until pageSlots(index)).map { slot -> index to slot }
+    }
     AlertDialog.Builder(this).setTitle("Pin " + item.label + " to Home")
-      .setItems(labels) { _, index ->
-        prefs.edit().putString("pinned_" + index, item.id).apply()
+      .setItems(choices.map { (page, slot) ->
+        "Page " + (page + 1) + " · Shortcut " + (slot + 1)
+      }.toTypedArray()) { _, selected ->
+        val (target, slot) = choices[selected]
+        prefs.edit().putString(pinKey(target, slot), item.id).apply()
+        homePage = target
+        rememberPage()
+        showHome()
         toast(item.label + " added to Home")
       }.setNegativeButton("Cancel", null).show()
   }
