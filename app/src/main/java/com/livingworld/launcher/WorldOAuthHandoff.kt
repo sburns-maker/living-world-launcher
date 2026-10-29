@@ -37,6 +37,7 @@ object WorldOAuthHandoff {
   // An in-memory handoff, never stored as plaintext or in a URL.
   data class Session(val access: String, val refresh: String)
   @Volatile private var awaitingSession: Session? = null
+  @Volatile private var lastFailure: String? = null
 
   private fun encoder(bytes: ByteArray): String =
     Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
@@ -133,7 +134,28 @@ object WorldOAuthHandoff {
     return Session(access, refresh)
   }
 
-  fun publish(session: Session) { awaitingSession = session }
+  fun publish(session: Session) {
+    lastFailure = null
+    awaitingSession = session
+  }
+  fun publishFailure(reason: String) {
+    // Never persist or display browser-provided credentials or callback data.
+    lastFailure = when {
+      reason.contains("refresh token", true) -> "Google returned no refresh token. Please reconnect."
+      reason.contains("access token", true) -> "Google returned no access token. Please reconnect."
+      reason.contains("expired", true) -> "Google sign-in expired. Tap Connect with Google again."
+      reason.contains("No pending", true) -> "Google sign-in request was lost. Tap Connect with Google again."
+      reason.contains("state", true) -> "Google sign-in verification failed. Start a new connection."
+      reason.contains("encryption", true) || reason.contains("decrypt", true) ->
+        "Secure Google return could not be decrypted. Start a new connection."
+      else -> "Google return could not be completed. Please try connecting again."
+    }
+  }
+  fun takeFailure(): String? = synchronized(this) {
+    val value = lastFailure
+    lastFailure = null
+    value
+  }
   fun take(): Session? = synchronized(this) {
     val value = awaitingSession
     awaitingSession = null
