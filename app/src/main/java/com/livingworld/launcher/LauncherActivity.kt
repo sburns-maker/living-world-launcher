@@ -923,17 +923,23 @@ class LauncherActivity : Activity() {
       content.addView(UiKit.gap(this, 9))
     }
     section("Personalize")
-    item("Change wallpaper", "Android wallpaper chooser") {
-      try { startActivity(Intent(Intent.ACTION_SET_WALLPAPER)) }
-      catch (_: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
-    }
-    item("Home screens", "Add or remove pages, customize shortcuts") {
+    item("Customize Home", "Wallpaper, widgets, Home pages, clock and shortcuts") {
       showHome()
-      toast("Swipe Home pages or tap + Page and ⋯ Pages")
+      customizeHome()
+    }
+    item("Change wallpaper", "Phone wallpaper, photo or gradient") {
+      changeWallpaper()
+    }
+    item("Home screens", "Long press empty Home space to customize") {
+      showHome()
+      toast("Long-press an empty area to customize Home")
     }
     item("Add widgets", "Clock, date, notifications, or Android app widgets") {
       showHome()
       widgets.add(homePage) { showHome() }
+    }
+    item("Clock and date", "Move or hide the built-in clock") {
+      clockMenu()
     }
     item("Customize home shortcuts", "Long-press a shortcut on Home") {
       showHome()
