@@ -364,9 +364,7 @@ class LauncherActivity : Activity() {
           top = bars.top
           bottom = bars.bottom
         } else {
-          @Suppress("DEPRECATION")
           top = windowInsets.systemWindowInsetTop
-          @Suppress("DEPRECATION")
           bottom = windowInsets.systemWindowInsetBottom
         }
         view.setPadding(dp(16), dp(16) + top, dp(16), dp(20) + bottom)
@@ -797,6 +795,14 @@ class LauncherActivity : Activity() {
     item("Change wallpaper", "Android wallpaper chooser") {
       try { startActivity(Intent(Intent.ACTION_SET_WALLPAPER)) }
       catch (_: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+    }
+    item("Home screens", "Add or remove pages, customize shortcuts") {
+      showHome()
+      toast("Swipe Home pages or tap + Page and ⋯ Pages")
+    }
+    item("Add widgets", "Clock, date, notifications, or Android app widgets") {
+      showHome()
+      widgets.add(homePage) { showHome() }
     }
     item("Customize home shortcuts", "Long-press a shortcut on Home") {
       showHome()
