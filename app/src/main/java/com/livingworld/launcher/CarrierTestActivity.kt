@@ -33,6 +33,9 @@ class CarrierTestActivity : Activity() {
       "Samsung Galaxy Z Fold6 / T-Mobile test build. Back up messages first. Switching the default SMS app redirects incoming SMS and MMS to this experimental app.", 15f, UiKit.ink))
     status = UiKit.text(this, "", 15f, UiKit.ink)
     root.addView(status)
+    root.addView(UiKit.clickable(this, "Run offline MMS checks — no messages sent") {
+      startActivity(Intent(this, MmsOfflineCheckActivity::class.java))
+    })
     root.addView(UiKit.clickable(this, "Refresh SMS/MMS carrier results") { refresh() })
     root.addView(UiKit.clickable(this, "Grant MMS Phone and notification permissions") {
       askPermissions()
