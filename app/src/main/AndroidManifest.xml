@@ -64,6 +64,7 @@
       </intent-filter>
     </activity>
     <activity android:name=".WorldInboxActivity" android:exported="false" />
+    <activity android:name=".PhoneHubActivity" android:exported="false" />
     <activity android:name=".UnifiedContactsActivity" android:exported="false" />
     <activity android:name=".UnifiedMessagesActivity" android:exported="false" />
     <activity android:name=".LauncherActivity" android:exported="true" android:launchMode="singleTask">
