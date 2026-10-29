@@ -54,6 +54,7 @@ class WorldInboxActivity : Activity() {
   private var pendingGoogleSession: WorldOAuthHandoff.Session? = null
   private var googleSessionApplying = false
   private var bridgeDiagnostic = "Sign in inside the app to sync AI conversations."
+  private var lastAuthError: String? = null
   private var webBridgeLoaded = false
   private var chatBridgeLoaded = false
   private var showingConversation = false
@@ -112,8 +113,9 @@ class WorldInboxActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     pendingGoogleSession = WorldOAuthHandoff.take()
+    if (pendingGoogleSession != null) lastAuthError = null
     if (pendingGoogleSession == null) {
-      WorldOAuthHandoff.takeFailure()?.let { bridgeDiagnostic = it }
+      WorldOAuthHandoff.takeFailure()?.let { lastAuthError = it; bridgeDiagnostic = it }
     }
     window.statusBarColor = UiKit.bg
     window.navigationBarColor = UiKit.bg
@@ -366,6 +368,7 @@ class WorldInboxActivity : Activity() {
   }
 
   private fun beginGoogleSignin() {
+    lastAuthError = null
     bridgeDiagnostic = "Opening Google sign-in in Chrome…"
     render(worldThreads)
     pictures.execute {
@@ -391,6 +394,7 @@ class WorldInboxActivity : Activity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     pendingGoogleSession = WorldOAuthHandoff.take() ?: pendingGoogleSession
+    if (pendingGoogleSession != null) lastAuthError = null
     if (pendingGoogleSession == null) {
       WorldOAuthHandoff.takeFailure()?.let {
         bridgeDiagnostic = it
@@ -558,7 +562,7 @@ class WorldInboxActivity : Activity() {
     if (!worldAuthenticated) {
       rows.addView(UiKit.text(this,
         "AI conversations aren't connected to this installation yet.", 14f, UiKit.muted))
-      rows.addView(UiKit.text(this, bridgeDiagnostic, 12f, UiKit.muted))
+      rows.addView(UiKit.text(this, lastAuthError ?: bridgeDiagnostic, 12f, UiKit.muted))
       rows.addView(UiKit.clickable(this, "Connect with Google") { beginGoogleSignin() })
       rows.addView(UiKit.clickable(this, "Retry AI conversation sync") {
         bridgeDiagnostic = "Checking the published Living World inbox…"
