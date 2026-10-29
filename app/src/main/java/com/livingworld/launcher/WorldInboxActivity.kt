@@ -2,6 +2,7 @@ package com.livingworld.launcher
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.app.PendingIntent
 import android.content.ComponentName
@@ -184,10 +185,23 @@ class WorldInboxActivity : Activity() {
     listPage = UiKit.vertical(this, 16).apply { setBackgroundColor(UiKit.bg) }
     val header = UiKit.horizontal(this)
     header.addView(UiKit.text(this, "Messages", 28f, UiKit.ink, true), LinearLayout.LayoutParams(0, -2, 1f))
-    header.addView(UiKit.clickable(this, "Test") {
-      startActivity(Intent(this, CarrierTestActivity::class.java))
+    header.addView(UiKit.clickable(this, "✎") {
+      if (SmsRole.isDefault(this)) startActivity(Intent(this, SmsComposeActivity::class.java))
+      else startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:")))
     })
-    header.addView(UiKit.clickable(this, "✎") { startActivity(Intent(this, SmsComposeActivity::class.java)) })
+    // Carrier diagnostics and notification permissions are available without
+    // cluttering the normal Messages interface.
+    header.addView(UiKit.clickable(this, "⋮") {
+      AlertDialog.Builder(this).setItems(arrayOf(
+        "Notification access", "Carrier SMS/MMS testing", "Open Google Messages"
+      )) { _, which ->
+        when (which) {
+          0 -> startActivity(GoogleMessagesBridge.settingsIntent())
+          1 -> startActivity(Intent(this, CarrierTestActivity::class.java))
+          else -> openRealMessages()
+        }
+      }.show()
+    })
     listPage.addView(header)
     rows = UiKit.vertical(this)
     inboxScroll = ScrollView(this).apply {
@@ -823,11 +837,8 @@ class WorldInboxActivity : Activity() {
         line.addView(detail, LinearLayout.LayoutParams(0, -2, 1f))
         line.isClickable = true
         line.setOnClickListener {
-          try {
-            val destination = item.openIntent
-            if (destination != null) destination.send()
-            else openRealMessages()
-          } catch (_: PendingIntent.CanceledException) { openRealMessages() }
+          startActivity(Intent(this, BridgeConversationActivity::class.java)
+            .putExtra(BridgeConversationActivity.EXTRA_NOTIFICATION_KEY, item.notificationKey))
         }
         rows.addView(line)
         rows.addView(UiKit.gap(this, 14))
@@ -863,16 +874,11 @@ class WorldInboxActivity : Activity() {
         rows.addView(UiKit.gap(this, 12))
       }
     }
-    rows.addView(UiKit.gap(this, 12))
-    if (!allowed) {
-      rows.addView(UiKit.clickable(this, "Allow message previews") {
-        startActivity(GoogleMessagesBridge.settingsIntent())
-      })
+    if (!allowed && !SmsRole.isDefault(this)) {
+      rows.addView(UiKit.text(this,
+        "Enable notification previews from ⋮ to see recent real messages here.",
+        13f, UiKit.muted))
     }
-    rows.addView(UiKit.clickable(this, "Carrier SMS/MMS test setup") {
-      startActivity(Intent(this, CarrierTestActivity::class.java))
-    })
-    rows.addView(UiKit.clickable(this, "Open Google Messages") { openRealMessages() })
   }
   private fun maybeRequestContacts() {
     if (!SmsRole.isDefault(this)) return
