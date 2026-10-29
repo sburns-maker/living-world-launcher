@@ -118,8 +118,14 @@ object WorldOAuthHandoff {
     require(kotlin.math.abs(now - issued) < 3 * 60 * 1000L) { "Sign-in response expired" }
     val access = message.getString("access_token")
     val refresh = message.getString("refresh_token")
-    require(access.length in 20..12000 && refresh.length in 20..12000) {
-      "Missing authenticated session"
+    // OAuth providers may issue opaque refresh tokens of different lengths.
+    // Length is not a security property: session validity is determined by
+    // the backend after setSession()/getUser(), not by this arbitrary minimum.
+    require(access.isNotBlank() && access.length <= 12000) {
+      "Google return did not contain an access token; please reconnect"
+    }
+    require(refresh.isNotBlank() && refresh.length <= 12000) {
+      "Google return did not contain a refresh token; please reconnect"
     }
     // Consume pending state before navigation; a callback cannot be replayed.
     check(stored.edit().clear().commit()) { "Failed to complete the sign-in request" }
