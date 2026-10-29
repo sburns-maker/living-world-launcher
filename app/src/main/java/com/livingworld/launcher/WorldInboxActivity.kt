@@ -956,9 +956,17 @@ class WorldInboxActivity : Activity() {
   }
 
   private fun loadPhoto(view: ImageView, url: String) {
+    if (url.isBlank()) return
     val resolved = if (url.startsWith("/")) WorldBackend.ORIGIN + url else url
     val uri = Uri.parse(resolved)
     if (uri.scheme != "https" || uri.host.isNullOrBlank()) return
+    // Preserve portraits across inbox redraws and network refreshes. Otherwise
+    // image tiles blink back to initials every time a message is synchronized.
+    portraitCache.get(resolved)?.let { cached ->
+      view.setImageBitmap(cached)
+      view.scaleType = ImageView.ScaleType.CENTER_CROP
+      return
+    }
     pictures.execute {
       try {
         val connection = URL(resolved).openConnection() as HttpURLConnection
@@ -966,7 +974,8 @@ class WorldInboxActivity : Activity() {
         connection.readTimeout = 6000
         connection.instanceFollowRedirects = false
         if (connection.responseCode != 200 || connection.contentLengthLong > 350000) {
-          connection.disconnect(); return@execute
+          connection.disconnect()
+          return@execute
         }
         val bytes = connection.inputStream.use { stream ->
           val output = java.io.ByteArrayOutputStream()
@@ -980,9 +989,15 @@ class WorldInboxActivity : Activity() {
         }
         connection.disconnect()
         if (bytes.size > 350000) return@execute
-        val opts = BitmapFactory.Options().apply { inSampleSize = 4 }
-        val image = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return@execute
-        runOnUiThread { view.setImageBitmap(image); view.scaleType = ImageView.ScaleType.CENTER_CROP }
+        val image = BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
+          BitmapFactory.Options().apply { inSampleSize = 4 }) ?: return@execute
+        portraitCache.put(resolved, image)
+        runOnUiThread {
+          if (!isFinishing && !isDestroyed && view.isAttachedToWindow) {
+            view.setImageBitmap(image)
+            view.scaleType = ImageView.ScaleType.CENTER_CROP
+          }
+        }
       } catch (_: Exception) { }
     }
   }
