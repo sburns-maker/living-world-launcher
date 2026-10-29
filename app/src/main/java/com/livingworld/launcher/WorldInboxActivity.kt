@@ -1081,12 +1081,10 @@ class WorldInboxActivity : Activity() {
   private fun loadAiPhoto(view: ImageView, url: String, desiredWidth: Int) {
     if (WorldImageLoader.resolve(url) == null) return
     pictures.execute {
-      val bitmap = runCatching {
-        WorldImageLoader.fetch(url)?.bitmap(1600)
-      }.getOrNull()
+      val bitmap = runCatching { WorldImageLoader.preview(url) }.getOrNull()
       runOnUiThread {
         if (isFinishing || isDestroyed || !view.isAttachedToWindow) {
-          bitmap?.recycle()
+          // Cached bitmaps are retained by WorldImageLoader for the next render.
           return@runOnUiThread
         }
         if (bitmap == null) {
