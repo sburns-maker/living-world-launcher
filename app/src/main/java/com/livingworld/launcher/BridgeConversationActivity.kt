@@ -2,32 +2,48 @@ package com.livingworld.launcher
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.Notification
 import android.app.PendingIntent
 import android.app.RemoteInput
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import java.text.DateFormat
+import java.util.Date
 
 /**
- * Optional, short-lived conversation window for Google Messages notifications,
- * including RCS. This is not an RCS provider or a complete message history.
- * Replies use only the RemoteInput action Google Messages supplies.
+ * Native notification-derived Google Messages conversation.
+ * Google Messages remains the SMS/RCS default. No carrier or RCS sends occur here:
+ * reply is delegated only through an active Google Messages RemoteInput.
  */
 class BridgeConversationActivity : Activity() {
+  private val threadId: String by lazy { intent.getStringExtra(EXTRA_THREAD_ID).orEmpty() }
   private lateinit var title: TextView
-  private lateinit var preview: TextView
+  private lateinit var messages: LinearLayout
+  private lateinit var scroll: ScrollView
   private lateinit var status: TextView
   private lateinit var composer: EditText
   private lateinit var send: TextView
-  private val key: String by lazy { intent.getStringExtra(EXTRA_NOTIFICATION_KEY).orEmpty() }
   private var submitting = false
+  private var relayListening = false
+  private var lastSignature: String? = null
+  private val relayReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      if (intent?.action == GoogleMessagesBridge.ACTION_UPDATED) renderThread()
+    }
+  }
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -36,40 +52,35 @@ class BridgeConversationActivity : Activity() {
     window.decorView.systemUiVisibility =
       View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
     window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-    val root = UiKit.vertical(this, 14).apply {
+    if (threadId.isBlank()) { finish(); return }
+    val root = UiKit.vertical(this, 10).apply {
       setBackgroundColor(UiKit.bg)
       fitsSystemWindows = true
     }
     setContentView(root)
-
     val header = UiKit.horizontal(this)
     header.addView(UiKit.clickable(this, "‹") { finish() })
-    title = UiKit.text(this, "Conversation", 20f, UiKit.ink, true)
+    title = UiKit.text(this, "Conversation", 19f, UiKit.ink, true)
     header.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
     header.addView(UiKit.clickable(this, "⋮") {
-      AlertDialog.Builder(this).setItems(arrayOf("Open full chat in Google Messages")) { _, _ ->
-        openOriginal()
-      }.show()
+      AlertDialog.Builder(this)
+        .setItems(arrayOf("Open full conversation in Google Messages",
+          "Clear local notification previews")) { _, choice ->
+          if (choice == 0) openOriginal()
+          else AlertDialog.Builder(this).setTitle("Clear saved previews?")
+            .setMessage("This removes Living World's cached notification snippets, not the original messages.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Clear") { _, _ ->
+              RelayHistoryStore.clear(this)
+              renderThread()
+            }.show()
+        }.show()
     })
     root.addView(header)
-    val body = UiKit.vertical(this, 10)
-    body.addView(UiKit.text(this,
-      "Latest notification preview", 12f, UiKit.muted))
-    val incoming = UiKit.horizontal(this).apply { gravity = Gravity.START }
-    preview = UiKit.text(this, "", 16f, UiKit.ink).apply {
-      setPadding(UiKit.dp(this@BridgeConversationActivity, 14),
-        UiKit.dp(this@BridgeConversationActivity, 12),
-        UiKit.dp(this@BridgeConversationActivity, 14),
-        UiKit.dp(this@BridgeConversationActivity, 12))
-      background = UiKit.surface(this@BridgeConversationActivity, Color.WHITE)
-      maxWidth = (resources.displayMetrics.widthPixels * .82f).toInt()
-    }
-    incoming.addView(preview)
-    body.addView(incoming)
-    body.addView(UiKit.text(this,
-      "Only notifications currently provided by Google Messages appear here. Open the full chat for earlier messages and delivery details.",
-      12f, UiKit.muted))
-    root.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
+    scroll = ScrollView(this).apply { isFillViewport = true }
+    messages = UiKit.vertical(this, 8)
+    scroll.addView(messages)
+    root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
     status = UiKit.text(this, "", 12f, UiKit.muted)
     root.addView(status)
     val bar = UiKit.horizontal(this)
@@ -79,98 +90,151 @@ class BridgeConversationActivity : Activity() {
       maxLines = 5
       setSingleLine(false)
       background = UiKit.surface(this@BridgeConversationActivity)
-      setPadding(UiKit.dp(this@BridgeConversationActivity, 14),
+      setPadding(UiKit.dp(this@BridgeConversationActivity, 12),
         UiKit.dp(this@BridgeConversationActivity, 9),
-        UiKit.dp(this@BridgeConversationActivity, 14),
+        UiKit.dp(this@BridgeConversationActivity, 12),
         UiKit.dp(this@BridgeConversationActivity, 9))
     }
     bar.addView(composer, LinearLayout.LayoutParams(0, -2, 1f))
-    send = UiKit.clickable(this, "Send") { submitReply() }
+    send = UiKit.clickable(this, "➤") { submitReply() }
+    send.contentDescription = "Send through Google Messages"
     bar.addView(send)
     root.addView(bar)
-    renderEntry()
+    RelayHistoryStore.markRead(this, threadId)
+    renderThread()
   }
 
   override fun onResume() {
     super.onResume()
-    if (::title.isInitialized) renderEntry()
+    if (!relayListening) {
+      val filter = IntentFilter(GoogleMessagesBridge.ACTION_UPDATED)
+      if (Build.VERSION.SDK_INT >= 33)
+        registerReceiver(relayReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+      else {
+        @Suppress("DEPRECATION")
+        registerReceiver(relayReceiver, filter)
+      }
+      relayListening = true
+    }
+    if (::messages.isInitialized) renderThread()
+  }
+  override fun onPause() {
+    if (relayListening) { unregisterReceiver(relayReceiver); relayListening = false }
+    super.onPause()
   }
 
-  private fun textReply(entry: BridgeEntry): Pair<android.app.Notification.Action, Array<RemoteInput>>? {
+  private fun liveAction(): Pair<Notification.Action, Array<RemoteInput>>? {
+    val entry = BridgeInbox.findThread(threadId) ?: return null
     val action = entry.replyAction ?: return null
-    val inputs = action.remoteInputs?.filter { it.allowFreeFormInput }?.toTypedArray() ?: return null
+    val inputs = action.remoteInputs?.filter { it.allowFreeFormInput }?.toTypedArray()
+      ?: return null
     if (inputs.isEmpty()) return null
     return action to inputs
   }
 
-  private fun renderEntry() {
-    val entry = BridgeInbox.find(key)
-    if (entry == null) {
-      title.text = "Conversation"
-      preview.text = "This notification is no longer available."
-      composer.isEnabled = false
-      send.isEnabled = false
-      send.alpha = .45f
-      if (!submitting) status.text = "Open Google Messages to continue."
-      return
+  private fun renderThread() {
+    val cached = RelayHistoryStore.threads(this).firstOrNull { it.id == threadId }
+    val active = BridgeInbox.findThread(threadId)
+    title.text = cached?.title ?: active?.sender ?: "Conversation"
+    val saved = RelayHistoryStore.messages(this, threadId)
+    val shown = if (saved.isEmpty() && active != null) listOf(RelayMessage(
+      active.notificationKey, active.sender, active.preview, active.postedAt, false
+    )) else saved
+
+    val signature = shown.joinToString("|") { it.id } + ":" + title.text
+    if (signature != lastSignature) {
+      lastSignature = signature
+      messages.removeAllViews()
+      if (shown.isEmpty()) {
+        messages.addView(UiKit.text(this,
+          "No saved notification previews. Open Google Messages for the conversation.",
+          14f, UiKit.muted))
+      }
+      shown.forEach { msg ->
+        val line = UiKit.horizontal(this).apply {
+          gravity = if (msg.outgoing) Gravity.END else Gravity.START
+        }
+        val bubble = UiKit.vertical(this, 3)
+        if (!msg.outgoing && msg.sender != title.text.toString()) {
+          bubble.addView(UiKit.text(this, msg.sender, 12f, UiKit.muted))
+        }
+        val label = UiKit.text(this, msg.body, 16f, UiKit.ink).apply {
+          background = UiKit.surface(this@BridgeConversationActivity,
+            if (msg.outgoing) Color.rgb(220, 233, 254) else Color.WHITE, 20)
+          setPadding(UiKit.dp(this@BridgeConversationActivity, 13),
+            UiKit.dp(this@BridgeConversationActivity, 10),
+            UiKit.dp(this@BridgeConversationActivity, 13),
+            UiKit.dp(this@BridgeConversationActivity, 10))
+          maxWidth = (resources.displayMetrics.widthPixels * .83f).toInt()
+        }
+        bubble.addView(label)
+        bubble.addView(UiKit.text(this,
+          DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(msg.at)),
+          11f, UiKit.muted))
+        line.addView(bubble)
+        messages.addView(line)
+        messages.addView(UiKit.gap(this, 8))
+      }
+      scroll.post { scroll.fullScroll(View.FOCUS_DOWN) }
     }
-    title.text = ContactNameResolver.display(entry.sender, ContactNameResolver.snapshot(this))
-    preview.text = entry.preview.ifBlank { "New message" }
-    val canReply = !submitting && textReply(entry) != null
+    val canReply = !submitting && liveAction() != null
     composer.isEnabled = canReply
     send.isEnabled = canReply
     send.alpha = if (canReply) 1f else .45f
-    if (!canReply && !submitting) status.text = "Reply from Google Messages to continue."
+    if (!canReply && status.text.isBlank()) {
+      status.text = "Reply unavailable here. Open Google Messages to continue."
+    }
   }
 
   private fun submitReply() {
     if (submitting) return
     val message = composer.text.toString().trim()
     if (message.isBlank()) return
-    val entry = BridgeInbox.find(key)
-    val reply = entry?.let(::textReply)
+    val reply = liveAction()
     if (reply == null) {
-      renderEntry()
-      Toast.makeText(this, "Reply action expired. Open Google Messages.", Toast.LENGTH_LONG).show()
+      renderThread()
+      Toast.makeText(this, "Open Google Messages to reply.", Toast.LENGTH_LONG).show()
       return
     }
     submitting = true
     send.isEnabled = false
-    val (action, inputs) = reply
     try {
-      val values = Bundle()
-      inputs.forEach { input -> values.putCharSequence(input.resultKey, message) }
-      val fillIn = Intent()
-      RemoteInput.addResultsToIntent(inputs, fillIn, values)
-      action.actionIntent.send(this, 0, fillIn)
+      val (action, inputs) = reply
+      val data = Bundle()
+      inputs.forEach { input -> data.putCharSequence(input.resultKey, message) }
+      val intent = Intent()
+      RemoteInput.addResultsToIntent(inputs, intent, data)
+      action.actionIntent.send(this, 0, intent)
       composer.setText("")
-      status.text = "Reply submitted through Google Messages; delivery isn't confirmed."
+      RelayHistoryStore.record(this, threadId, title.text.toString(),
+        listOf(RelayEvent("You", message, System.currentTimeMillis(), true)))
+      status.text = "Submitted through Google Messages; delivery not confirmed."
+      renderThread()
     } catch (_: PendingIntent.CanceledException) {
-      status.text = "Reply action expired. Your draft is preserved."
+      status.text = "Reply expired. Your draft was kept."
     } catch (_: Exception) {
-      status.text = "Could not submit reply. Your draft is preserved."
+      status.text = "Reply could not be submitted. Your draft was kept."
     } finally {
       submitting = false
-      renderEntry()
+      renderThread()
     }
   }
 
   private fun openOriginal() {
-    val entry = BridgeInbox.find(key)
     try {
-      val original = entry?.openIntent
+      val original = BridgeInbox.findThread(threadId)?.openIntent
       if (original != null) { original.send(); return }
-    } catch (_: PendingIntent.CanceledException) { /* Fall back. */ }
+    } catch (_: PendingIntent.CanceledException) { /* Use app launch fallback. */ }
     try {
-      val system = packageManager.getLaunchIntentForPackage(GoogleMessagesBridge.GOOGLE_MESSAGES)
+      val destination = packageManager.getLaunchIntentForPackage(GoogleMessagesBridge.GOOGLE_MESSAGES)
         ?: Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)
-      startActivity(system)
+      startActivity(destination)
     } catch (_: Exception) {
       Toast.makeText(this, "Google Messages unavailable", Toast.LENGTH_SHORT).show()
     }
   }
 
   companion object {
-    const val EXTRA_NOTIFICATION_KEY = "notificationKey"
+    const val EXTRA_THREAD_ID = "relayThreadId"
   }
 }
