@@ -271,7 +271,7 @@ class LauncherActivity : Activity() {
         iconLoading.remove(id)
         if (state != null) iconCache[id] = state
         iconWatchers.remove(id)?.forEach { target ->
-          if (state != null && target.isAttachedToWindow) {
+          if (state != null) {
             target.setImageDrawable(state.newDrawable(resources))
             (target.parent as? FrameLayout)?.findViewWithTag<View>("initial")?.visibility = View.GONE
           }
