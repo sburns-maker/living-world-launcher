@@ -967,8 +967,6 @@ class WorldInboxActivity : Activity() {
     val resolved = if (url.startsWith("/")) WorldBackend.ORIGIN + url else url
     val uri = Uri.parse(resolved)
     if (uri.scheme != "https" || uri.host.isNullOrBlank()) return
-    // Preserve portraits across inbox redraws and network refreshes. Otherwise
-    // image tiles blink back to initials every time a message is synchronized.
     portraitCache.get(resolved)?.let { cached ->
       view.setImageBitmap(cached)
       view.scaleType = ImageView.ScaleType.CENTER_CROP
@@ -976,28 +974,53 @@ class WorldInboxActivity : Activity() {
     }
     pictures.execute {
       try {
-        val connection = URL(resolved).openConnection() as HttpURLConnection
-        connection.connectTimeout = 6000
-        connection.readTimeout = 6000
-        connection.instanceFollowRedirects = false
-        if (connection.responseCode != 200 || connection.contentLengthLong > 350000) {
-          connection.disconnect()
+        // Canonical Riley and Sienna portraits are 2-3 MB PNGs. The prior
+        // 350 KB transfer cap rejected them before decoding. Download safely
+        // with a 4 MB limit, then decode at thumbnail resolution.
+        val limit = 4_000_000
+        var target = URL(resolved)
+        var connection: HttpURLConnection? = null
+        for (redirect in 0..2) {
+          if (target.protocol != "https") return@execute
+          val current = (target.openConnection() as HttpURLConnection).apply {
+            connectTimeout = 6000
+            readTimeout = 6000
+            instanceFollowRedirects = false
+          }
+          val status = current.responseCode
+          if (status in listOf(301, 302, 303, 307, 308) && redirect < 2) {
+            val location = current.getHeaderField("Location") ?: run {
+              current.disconnect()
+              return@execute
+            }
+            val next = URL(target, location)
+            current.disconnect()
+            if (next.protocol != "https") return@execute
+            target = next
+          } else {
+            connection = current
+            break
+          }
+        }
+        val current = connection ?: return@execute
+        if (current.responseCode != 200 || current.contentLengthLong > limit) {
+          current.disconnect()
           return@execute
         }
-        val bytes = connection.inputStream.use { stream ->
+        val bytes = current.inputStream.use { stream ->
           val output = java.io.ByteArrayOutputStream()
           val buffer = ByteArray(8192)
-          while (output.size() <= 350000) {
+          while (output.size() <= limit) {
             val count = stream.read(buffer)
             if (count < 0) break
             output.write(buffer, 0, count)
           }
           output.toByteArray()
         }
-        connection.disconnect()
-        if (bytes.size > 350000) return@execute
+        current.disconnect()
+        if (bytes.size > limit) return@execute
         val image = BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
-          BitmapFactory.Options().apply { inSampleSize = 4 }) ?: return@execute
+          BitmapFactory.Options().apply { inSampleSize = 8 }) ?: return@execute
         portraitCache.put(resolved, image)
         runOnUiThread {
           if (!isFinishing && !isDestroyed && view.isAttachedToWindow) {
