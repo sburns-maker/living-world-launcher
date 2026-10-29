@@ -63,6 +63,7 @@
         <data android:scheme="livingworld" android:host="auth" />
       </intent-filter>
     </activity>
+    <activity android:name=".BridgeConversationActivity" android:exported="false" />
     <activity android:name=".WorldInboxActivity" android:exported="false" />
     <activity android:name=".PhoneHubActivity" android:exported="false" />
     <activity android:name=".UnifiedContactsActivity" android:exported="false" />
