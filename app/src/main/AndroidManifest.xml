@@ -52,6 +52,7 @@
         <data android:scheme="mms" /><data android:scheme="mmsto" />
       </intent-filter>
     </activity>
+    <activity android:name=".MmsOfflineCheckActivity" android:exported="false" />
     <activity android:name=".CarrierTestActivity" android:exported="false" />
     <activity android:name=".SmsThreadActivity" android:exported="false" />
     <activity android:name=".WorldOAuthCallbackActivity"
