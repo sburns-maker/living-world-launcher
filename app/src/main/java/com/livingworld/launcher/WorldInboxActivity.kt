@@ -84,6 +84,13 @@ class WorldInboxActivity : Activity() {
   private var lastChatSignature: Int? = null
   private var lastInboxSignature: Int? = null
   private var worldThreads = emptyList<Thread>()
+  // Cached chat snapshots render instantly while the authenticated WebView
+  // fetches fresh data. Bounded and memory-only (not persisted on disk).
+  private val chatCache = object : LinkedHashMap<String, List<WorldMessage>>(8, .75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, List<WorldMessage>>?): Boolean =
+      size > 6
+  }
+  private var lastRefreshRequestId: String? = null
   private val recentChatPreviews = mutableMapOf<String, Pair<Long, String>>()
   private val portraitCache = object : LruCache<String, Bitmap>(6 * 1024 * 1024) {
     override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
@@ -184,7 +191,20 @@ class WorldInboxActivity : Activity() {
       runOnUiThread {
         if (!isFinishing && !isDestroyed && selectedWorldThread?.id == payload.first) {
           chatBridgeLoaded = true
-          val newest = payload.second.maxByOrNull { it.at }
+          // Preserve a complete message if an older network response later
+          // publishes only its early prefix. Prefer newer nonblank media URLs.
+          val oldById = chatCache[payload.first].orEmpty().associateBy { it.id }
+          val complete = payload.second.map { incoming ->
+            val old = oldById[incoming.id]
+            if (old == null) incoming
+            else incoming.copy(
+              text = if (old.text.length > incoming.text.length &&
+                old.text.startsWith(incoming.text)) old.text else incoming.text,
+              photo = incoming.photo.ifBlank { old.photo }
+            )
+          }
+          chatCache[payload.first] = complete
+          val newest = complete.maxByOrNull { it.at }
           if (newest != null && newest.at > 0L) {
             val snippet = newest.text.trim().ifBlank {
               if (newest.photo.isNotBlank()) "Photo" else "Message"
@@ -194,7 +214,7 @@ class WorldInboxActivity : Activity() {
             if (prior == null || newest.at >= prior.first)
               recentChatPreviews[payload.first] = newest.at to preview
           }
-          renderAiMessages(payload.second)
+          renderAiMessages(complete)
         }
       }
     }
@@ -304,8 +324,12 @@ class WorldInboxActivity : Activity() {
       setOnClickListener {
         selectedWorldThread?.let { thread ->
           AlertDialog.Builder(this@WorldInboxActivity).setItems(
-            arrayOf("Open full Living World conversation")) { _, _ ->
-            showBrowser(WorldBackend.ORIGIN + "/chat/" + thread.id)
+            arrayOf("Refresh messages", "Open full Living World conversation")) { _, choice ->
+            if (choice == 0) {
+              aiStatus.visibility = View.VISIBLE
+              aiStatus.text = "Checking for the complete conversation…"
+              requestNativeChatRefresh(thread.id, force = true)
+            } else showBrowser(WorldBackend.ORIGIN + "/chat/" + thread.id)
           }.show()
         }
       }
@@ -513,6 +537,30 @@ class WorldInboxActivity : Activity() {
         if (!isFinishing && !isDestroyed && selectedWorldThread?.id == conversationId &&
             !chatBridgeLoaded) probeNativeChatState(conversationId)
       }, delay)
+    }
+  }
+
+  private fun requestNativeChatRefresh(conversationId: String, force: Boolean = false) {
+    val browser = web ?: return
+    val url = browser.url.orEmpty()
+    if (!WorldBackend.isAllowed(url) ||
+        Uri.parse(url).path != "/chat/$conversationId" ||
+        selectedWorldThread?.id != conversationId) return
+    if (!force && lastRefreshRequestId == conversationId) return
+    val script = "(function(){const refresh=window.__livingWorldAndroidRefreshChat;" +
+      "if(typeof refresh!=='function')return 'unavailable';" +
+      "refresh(" + JSONObject.quote(conversationId) + ");return 'requested';})()"
+    browser.evaluateJavascript(script) { result ->
+      if (isFinishing || isDestroyed || selectedWorldThread?.id != conversationId)
+        return@evaluateJavascript
+      if (result == "\"requested\"") {
+        lastRefreshRequestId = conversationId
+        // The bridge will publish full text after the authenticated refetch.
+      } else if (force) {
+        aiStatus.text = "Full refresh requires the updated Living World website. Showing available messages."
+        aiStatus.visibility = View.VISIBLE
+        probeNativeChatState(conversationId)
+      }
     }
   }
 
@@ -741,16 +789,29 @@ class WorldInboxActivity : Activity() {
     aiComposer.setText("")
     chatPage.requestFocus()
     chatScroll.scrollTo(0, 0)
-    aiStatus.text = "Loading messages…"
+    aiStatus.text = "Updating conversation…"
+    aiStatus.visibility = View.VISIBLE
     chatMessages.removeAllViews()
+    chatCache[thread.id]?.let { cached ->
+      renderAiMessages(cached)
+      aiStatus.text = "Updating conversation…"
+      aiStatus.visibility = View.VISIBLE
+    }
     chatTitle.text = thread.name
     chatHeaderPortrait?.apply {
       setImageDrawable(null)
       loadPhoto(this, thread.photo)
     }
+    lastRefreshRequestId = null
     web?.loadUrl(WorldBackend.ORIGIN + "/chat/" + thread.id)
     scheduleChatProbe(thread.id)
     scheduleNativeChatProbe(thread.id)
+    for (delay in longArrayOf(2000L, 5500L)) {
+      Handler(Looper.getMainLooper()).postDelayed({
+        if (!isFinishing && !isDestroyed && selectedWorldThread?.id == thread.id)
+          requestNativeChatRefresh(thread.id)
+      }, delay)
+    }
   }
   private fun sendAiText() {
     val thread = selectedWorldThread ?: return
@@ -807,8 +868,10 @@ class WorldInboxActivity : Activity() {
     val status = if (chatBridgeLoaded) "Living World • synchronized"
       else "Preview only · Full chat available under ⋯"
     if (lastChatSignature == fingerprint) {
-      aiStatus.text = status
-      aiStatus.visibility = if (chatBridgeLoaded) View.GONE else View.VISIBLE
+      if (chatBridgeLoaded) {
+        aiStatus.text = status
+        aiStatus.visibility = View.GONE
+      }
       return
     }
 
