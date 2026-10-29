@@ -669,6 +669,28 @@ class LauncherActivity : Activity() {
     root.addView(UiKit.gap(this, 9))
     dock(root)
   }
+  private fun updateDrawerDots() {
+    drawerDots?.text = if (drawerPages <= 1) "1 / 1"
+      else (drawerIndex + 1).toString() + " / " + drawerPages
+  }
+  private fun slideDrawer(index: Int) {
+    drawerIndex = index.coerceIn(0, (drawerPages - 1).coerceAtLeast(0))
+    drawerScroller?.smoothScrollTo(drawerIndex * width(), 0)
+    updateDrawerDots()
+  }
+  private inner class DrawerPager : HorizontalScrollView(this@LauncherActivity) {
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+      val result = super.onTouchEvent(event)
+      if (event.actionMasked == MotionEvent.ACTION_UP) {
+        postDelayed({
+          val pageWidth = width().coerceAtLeast(1)
+          slideDrawer((scrollX + pageWidth / 2) / pageWidth)
+        }, 90)
+      }
+      return result
+    }
+  }
+
   private fun showApps(focus: Boolean) {
     page = Page.APPS
     val root = stage()
@@ -685,29 +707,64 @@ class LauncherActivity : Activity() {
     }
     root.addView(search, LinearLayout.LayoutParams(-1, dp(53)))
     root.addView(UiKit.gap(this, 12))
-    val scroll = ScrollView(this).apply {
+
+    val carousel = DrawerPager().apply {
+      isHorizontalScrollBarEnabled = false
       isFillViewport = true
-      isVerticalScrollBarEnabled = true
+      overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
     }
-    val holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-    scroll.addView(holder)
-    root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
-    val all = listOf("world", "phone", "messages", "contacts", "settings").map(::builtIn) +
+    val pages = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+    carousel.addView(pages)
+    root.addView(carousel, LinearLayout.LayoutParams(-1, 0, 1f))
+    drawerScroller = carousel
+    val pagerBar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+    pagerBar.addView(smallAction("‹") { slideDrawer(drawerIndex - 1) }.apply {
+      contentDescription = "Previous app drawer page"
+    })
+    drawerDots = text("1 / 1", 15f, true).apply { gravity = Gravity.CENTER }
+    pagerBar.addView(drawerDots, LinearLayout.LayoutParams(0, dp(45), 1f))
+    pagerBar.addView(smallAction("›") { slideDrawer(drawerIndex + 1) }.apply {
+      contentDescription = "Next app drawer page"
+    })
+    root.addView(pagerBar)
+
+    val items = listOf("world", "phone", "messages", "contacts", "settings").map(::builtIn) +
       installed().map(::systemApp)
-    fun render(query: String) {
-      holder.removeAllViews()
-      val filtered = all.filter { it.label.contains(query.trim(), true) }
-      if (filtered.isEmpty()) holder.addView(text("No matching apps", 16f))
-      else holder.addView(grid(filtered) { index -> pinApp(filtered[index]) })
+    fun render(query: String, reset: Boolean = true) {
+      pages.removeAllViews()
+      if (reset) drawerIndex = 0
+      val filtered = items.filter { it.label.contains(query.trim(), true) }
+      // Page by *rows*, not a long vertical scroll. Fold6 uses 4-6 columns
+      // based on current width; page size also adapts to the current height.
+      val availableRows = ((resources.configuration.screenHeightDp - 290) / 98)
+        .coerceIn(3, 6)
+      val groups = filtered.chunked(cols() * availableRows)
+      drawerPages = groups.size.coerceAtLeast(1)
+      val segments = if (groups.isEmpty()) listOf(emptyList()) else groups
+      for (batch in segments) {
+        val panel = FrameLayout(this)
+        if (batch.isEmpty()) {
+          panel.addView(text("No matching apps", 16f).apply { gravity = Gravity.CENTER },
+            FrameLayout.LayoutParams(-1, -1))
+        } else {
+          val positions = batch.toList()
+          panel.addView(grid(positions) { index -> pinApp(positions[index]) },
+            FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+        }
+        pages.addView(panel, LinearLayout.LayoutParams(width(), -1))
+      }
+      drawerIndex = drawerIndex.coerceIn(0, drawerPages - 1)
+      carousel.post { carousel.scrollTo(drawerIndex * width(), 0) }
+      updateDrawerDots()
     }
-    render(filter)
+    render(filter, false)
     search.addTextChangedListener(object : TextWatcher {
-      override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+      override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) { }
       override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
         filter = s?.toString().orEmpty()
         render(filter)
       }
-      override fun afterTextChanged(s: Editable?) {}
+      override fun afterTextChanged(s: Editable?) { }
     })
     if (focus) {
       search.requestFocus()
