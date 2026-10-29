@@ -250,6 +250,80 @@ class LauncherActivity : Activity() {
     }
   }
 
+  private fun wallpaperFile() = File(filesDir, "home_wallpaper.jpg")
+  private fun changeWallpaper() {
+    val choices = arrayOf("Choose photo for Living World Home", "Use phone's wallpaper",
+      "Blue and purple gradient", "Midnight gradient", "Ocean gradient")
+    AlertDialog.Builder(this).setTitle("Home wallpaper")
+      .setItems(choices) { _, index ->
+        when (index) {
+          0 -> try {
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+              type = "image/*"
+              addCategory(Intent.CATEGORY_OPENABLE)
+              addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }, REQUEST_WALLPAPER)
+          } catch (_: Exception) { toast("Photo picker unavailable") }
+          1 -> {
+            wallpaperFile().delete()
+            prefs.edit().putInt("wallpaper_mode", 0).apply()
+            showHome()
+          }
+          else -> {
+            wallpaperFile().delete()
+            prefs.edit().putInt("wallpaper_mode", index).apply()
+            showHome()
+          }
+        }
+      }.setNegativeButton("Cancel", null).show()
+  }
+  private fun importWallpaper(uri: Uri) {
+    try {
+      // Decode to a bounded size, rather than holding a camera-size bitmap.
+      val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+      contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+      if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw Exception("Invalid image")
+      var sample = 1
+      while (bounds.outWidth / sample > 1600 || bounds.outHeight / sample > 2400) sample *= 2
+      val options = BitmapFactory.Options().apply { inSampleSize = sample }
+      val image = contentResolver.openInputStream(uri)?.use {
+        BitmapFactory.decodeStream(it, null, options)
+      } ?: throw Exception("Could not read image")
+      FileOutputStream(wallpaperFile()).use { image.compress(Bitmap.CompressFormat.JPEG, 86, it) }
+      image.recycle()
+      prefs.edit().putInt("wallpaper_mode", 5).apply()
+      if (page == Page.HOME) showHome()
+    } catch (_: Exception) { toast("Couldn't load the wallpaper image") }
+  }
+  private fun paintWallpaper(view: View) {
+    val custom = wallpaperFile()
+    if (custom.isFile) {
+      try {
+        val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+        val img = BitmapFactory.decodeFile(custom.absolutePath, opts)
+        if (img != null) {
+          view.background = BitmapDrawable(resources, img)
+          return
+        }
+      } catch (_: Exception) { }
+    }
+    val mode = prefs.getInt("wallpaper_mode", 0)
+    if (mode == 0) {
+      try {
+        @Suppress("DEPRECATION")
+        val drawable = WallpaperManager.getInstance(this).peekDrawable()
+        if (drawable != null) { view.background = drawable; return }
+      } catch (_: Exception) { }
+    }
+    val colors = when (mode) {
+      2 -> intArrayOf(tint(33, 47, 94), tint(88, 57, 140), tint(20, 29, 59))
+      3 -> intArrayOf(tint(12, 20, 38), tint(42, 48, 68), tint(7, 13, 24))
+      4 -> intArrayOf(tint(8, 66, 83), tint(21, 99, 111), tint(14, 30, 72))
+      else -> intArrayOf(tint(28, 49, 91), tint(86, 69, 129), tint(29, 42, 74))
+    }
+    view.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, colors)
+  }
+
   private fun stage(): LinearLayout {
     clock = null
     date = null
@@ -258,18 +332,32 @@ class LauncherActivity : Activity() {
     window.navigationBarColor = tint(17, 25, 45)
     window.decorView.systemUiVisibility = 0
     val background = SwipeHomeLayout()
-    try {
-      @Suppress("DEPRECATION")
-      val image = WallpaperManager.getInstance(this).peekDrawable()
-      if (image != null) background.background = image else fallback(background)
-    } catch (_: Exception) { fallback(background) }
+    paintWallpaper(background)
     background.addView(View(this).apply {
       this.background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
         intArrayOf(tint(9, 18, 36, 119), tint(21, 28, 49, 170), tint(12, 18, 38, 230)))
     }, FrameLayout.LayoutParams(-1, -1))
     val root = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
-      setPadding(dp(16), dp(13), dp(16), dp(10))
+      setPadding(dp(16), dp(16), dp(16), dp(22))
+      // Android 15+ draws behind the Fold6 status/navigation bars. Apply
+      // actual system-bar insets instead of guessing margins from screenshots.
+      setOnApplyWindowInsetsListener { view, windowInsets ->
+        val top: Int
+        val bottom: Int
+        if (Build.VERSION.SDK_INT >= 30) {
+          val bars = windowInsets.getInsets(WindowInsets.Type.systemBars())
+          top = bars.top
+          bottom = bars.bottom
+        } else {
+          @Suppress("DEPRECATION")
+          top = windowInsets.systemWindowInsetTop
+          @Suppress("DEPRECATION")
+          bottom = windowInsets.systemWindowInsetBottom
+        }
+        view.setPadding(dp(16), dp(16) + top, dp(16), dp(20) + bottom)
+        windowInsets
+      }
     }
     background.addView(root, FrameLayout.LayoutParams(-1, -1))
     setContentView(background)
