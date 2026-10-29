@@ -20,6 +20,7 @@ import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
@@ -163,6 +164,40 @@ class LauncherActivity : Activity() {
     currentFocus?.let { keyboard()?.hideSoftInputFromWindow(it.windowToken, 0); it.clearFocus() }
   }
 
+  private inner class SwipeHomeLayout : FrameLayout(this@LauncherActivity) {
+    private var startX = 0f
+    private var startY = 0f
+    private var tracking = false
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+      if (page != Page.HOME) return super.onInterceptTouchEvent(event)
+      when (event.actionMasked) {
+        MotionEvent.ACTION_DOWN -> {
+          startX = event.x
+          startY = event.y
+          tracking = true
+        }
+        MotionEvent.ACTION_MOVE -> if (tracking) {
+          val rise = startY - event.y
+          val lateral = kotlin.math.abs(startX - event.x)
+          if (rise > dp(55) && rise > lateral * 1.35f) return true
+        }
+        MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> tracking = false
+      }
+      return super.onInterceptTouchEvent(event)
+    }
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+      if (page != Page.HOME) return super.onTouchEvent(event)
+      if (event.actionMasked == MotionEvent.ACTION_UP) {
+        if (startY - event.y > dp(55)) {
+          showApps(false)
+          return true
+        }
+        tracking = false
+      }
+      return true
+    }
+  }
+
   private fun stage(): LinearLayout {
     clock = null
     date = null
@@ -170,7 +205,7 @@ class LauncherActivity : Activity() {
     window.statusBarColor = tint(21, 33, 61)
     window.navigationBarColor = tint(17, 25, 45)
     window.decorView.systemUiVisibility = 0
-    val background = FrameLayout(this)
+    val background = SwipeHomeLayout()
     try {
       @Suppress("DEPRECATION")
       val image = WallpaperManager.getInstance(this).peekDrawable()
@@ -301,6 +336,14 @@ class LauncherActivity : Activity() {
         showHome()
       }.setNegativeButton("Cancel", null).show()
   }
+  private fun pinApp(item: Shortcut) {
+    val labels = arrayOf("Shortcut 1", "Shortcut 2", "Shortcut 3", "Shortcut 4")
+    AlertDialog.Builder(this).setTitle("Pin " + item.label + " to Home")
+      .setItems(labels) { _, index ->
+        prefs.edit().putString("pinned_" + index, item.id).apply()
+        toast(item.label + " added to Home")
+      }.setNegativeButton("Cancel", null).show()
+  }
   private fun showHome() {
     page = Page.HOME
     val root = stage()
@@ -369,7 +412,7 @@ class LauncherActivity : Activity() {
       holder.removeAllViews()
       val filtered = all.filter { it.label.contains(query.trim(), true) }
       if (filtered.isEmpty()) holder.addView(text("No matching apps", 16f))
-      else holder.addView(grid(filtered))
+      else holder.addView(grid(filtered) { index -> pinApp(filtered[index]) })
     }
     render(filter)
     search.addTextChangedListener(object : TextWatcher {
