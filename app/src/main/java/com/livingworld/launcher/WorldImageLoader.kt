@@ -3,6 +3,7 @@ package com.livingworld.launcher
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.LruCache
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
@@ -13,6 +14,19 @@ import java.net.URL
  */
 object WorldImageLoader {
   const val MAX_BYTES = 18 * 1024 * 1024
+  // Keep decoded conversation previews bounded in memory; the full original is
+  // fetched separately only when someone opens the photo viewer.
+  private val previews = object : LruCache<String, Bitmap>(24 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+  }
+
+  fun preview(link: String): Bitmap? {
+    val resolved = resolve(link) ?: return null
+    previews.get(resolved)?.let { return it }
+    val bitmap = fetch(resolved)?.bitmap(1250) ?: return null
+    previews.put(resolved, bitmap)
+    return bitmap
+  }
 
   data class Source(val bytes: ByteArray, val mime: String) {
     fun bitmap(maxDimension: Int = 1600): Bitmap? {
@@ -22,12 +36,20 @@ object WorldImageLoader {
       if (maxSide <= 0 || maxSide > 16000 || bounds.outWidth.toLong() * bounds.outHeight > 100_000_000L)
         return null
       var sample = 1
-      while (maxSide / sample > maxDimension * 2 && sample < 64) sample *= 2
-      return BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
+      while (maxSide / sample > maxDimension * 1.5f && sample < 64) sample *= 2
+      val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
         BitmapFactory.Options().apply {
           inSampleSize = sample
           inPreferredConfig = Bitmap.Config.ARGB_8888
-        })
+        }) ?: return null
+      val longSide = maxOf(decoded.width, decoded.height)
+      if (longSide <= maxDimension) return decoded
+      val ratio = maxDimension.toFloat() / longSide
+      val scaled = Bitmap.createScaledBitmap(decoded,
+        maxOf(1, (decoded.width * ratio).toInt()),
+        maxOf(1, (decoded.height * ratio).toInt()), true)
+      if (scaled !== decoded) decoded.recycle()
+      return scaled
     }
   }
 
