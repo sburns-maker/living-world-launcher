@@ -231,9 +231,14 @@ class LauncherActivity : Activity() {
           tracking = true
         }
         MotionEvent.ACTION_MOVE -> if (tracking) {
+          val horizontal = kotlin.math.abs(event.x - startX)
+          val vertical = kotlin.math.abs(event.y - startY)
+          if (pageCount() > 1 && horizontal > dp(50) &&
+              horizontal > vertical * 1.5f) return true
           val rise = startY - event.y
-          val lateral = kotlin.math.abs(startX - event.x)
-          if (rise > dp(55) && rise > lateral * 1.35f) return true
+          // Do not steal vertical scrolling from native widgets.
+          if (rise > dp(70) && horizontal < dp(25) && homePage == 0 &&
+              widgets.count(homePage) == 0) return true
         }
         MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> tracking = false
       }
@@ -242,11 +247,18 @@ class LauncherActivity : Activity() {
     override fun onTouchEvent(event: MotionEvent): Boolean {
       if (page != Page.HOME) return super.onTouchEvent(event)
       if (event.actionMasked == MotionEvent.ACTION_UP) {
-        if (startY - event.y > dp(55)) {
+        val dx = event.x - startX
+        val dy = event.y - startY
+        tracking = false
+        if (kotlin.math.abs(dx) > dp(55) &&
+            kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.4f) {
+          jumpPage(homePage + if (dx < 0f) 1 else -1)
+          return true
+        }
+        if (-dy > dp(70) && homePage == 0 && widgets.count(homePage) == 0) {
           showApps(false)
           return true
         }
-        tracking = false
       }
       return true
     }
