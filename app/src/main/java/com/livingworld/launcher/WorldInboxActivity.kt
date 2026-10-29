@@ -749,6 +749,33 @@ class WorldInboxActivity : Activity() {
     if (::chatPage.isInitialized) chatPage.requestFocus()
   }
 
+  /**
+   * Prefer the existing React/TanStack Router links rather than reloading the
+   * entire authenticated website for every chat. If an anchor is unavailable,
+   * fall back to the previous full navigation for correctness.
+   */
+  private fun navigateWebTo(path: String) {
+    val browser = web ?: return
+    val destination = WorldBackend.ORIGIN + path
+    val current = browser.url.orEmpty()
+    if (!WorldBackend.isAllowed(current)) {
+      browser.loadUrl(destination)
+      return
+    }
+    if (Uri.parse(current).path == path) return
+    val threadAtRequest = selectedWorldThread?.id
+    val script = "(function(){const wanted=" + JSONObject.quote(path) +
+      ";const link=Array.from(document.querySelectorAll('a[href]'))" +
+      ".find(a=>{try{return new URL(a.href,location.href).pathname===wanted;}" +
+      "catch(e){return false;}});if(!link)return 'missing';" +
+      "link.click();return 'clicked';})()"
+    browser.evaluateJavascript(script) { result ->
+      if (isFinishing || isDestroyed ||
+          selectedWorldThread?.id != threadAtRequest) return@evaluateJavascript
+      if (result != "\"clicked\"") browser.loadUrl(destination)
+    }
+  }
+
   private fun showNative() {
     hideComposerKeyboard()
     showingConversation = false
@@ -758,7 +785,7 @@ class WorldInboxActivity : Activity() {
     globalBack.visibility = View.VISIBLE
     listPage.visibility = View.VISIBLE
     setWebMode(false)
-    web?.loadUrl(WorldBackend.INBOX_URL)
+    navigateWebTo("/inbox")
     scheduleInboxProbe()
     render(worldThreads)
   }
@@ -803,7 +830,7 @@ class WorldInboxActivity : Activity() {
       loadPhoto(this, thread.photo)
     }
     lastRefreshRequestId = null
-    web?.loadUrl(WorldBackend.ORIGIN + "/chat/" + thread.id)
+    navigateWebTo("/chat/" + thread.id)
     scheduleChatProbe(thread.id)
     scheduleNativeChatProbe(thread.id)
     for (delay in longArrayOf(2000L, 5500L)) {
