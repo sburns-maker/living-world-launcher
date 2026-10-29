@@ -494,43 +494,167 @@ class LauncherActivity : Activity() {
         toast(item.label + " added to Home")
       }.setNegativeButton("Cancel", null).show()
   }
+  private fun addPage() {
+    if (pageCount() >= 6) { toast("Six Home pages is the current limit"); return }
+    homePage = pageCount()
+    prefs.edit().putInt("home_page_count", homePage + 1).apply()
+    rememberPage()
+    showHome()
+  }
+
+  private fun removePage() {
+    if (homePage == 0 || pageCount() == 1) {
+      toast("Keep your main Home page")
+      return
+    }
+    val removing = homePage
+    AlertDialog.Builder(this).setTitle("Remove Home page " + (removing + 1) + "?")
+      .setMessage("This removes its shortcuts and widgets. Installed apps are not deleted.")
+      .setNegativeButton("Cancel", null)
+      .setPositiveButton("Remove") { _, _ ->
+        widgets.clearPage(removing)
+        val priorCount = pageCount()
+        for (index in removing until priorCount - 1) {
+          widgets.movePage(index + 1, index)
+          for (slot in 0 until 8) {
+            val next = prefs.getString(pinKey(index + 1, slot), "empty")
+            prefs.edit().putString(pinKey(index, slot), next).apply()
+          }
+        }
+        for (slot in 0 until 8)
+          prefs.edit().remove(pinKey(priorCount - 1, slot)).apply()
+        prefs.edit().putInt("home_page_count", priorCount - 1).apply()
+        homePage = (removing - 1).coerceAtLeast(0)
+        rememberPage()
+        showHome()
+      }.show()
+  }
+  private fun jumpPage(index: Int) {
+    val next = index.coerceIn(0, pageCount() - 1)
+    if (next == homePage) return
+    homePage = next
+    rememberPage()
+    showHome()
+  }
+  private fun smallAction(label: String, action: () -> Unit): TextView =
+    text(label, 12f, true).apply {
+      gravity = Gravity.CENTER
+      setPadding(dp(8), dp(10), dp(8), dp(10))
+      background = surface(tint(23, 33, 59, 226), 18)
+      isClickable = true
+      isFocusable = true
+      setOnClickListener { action() }
+    }
+
   private fun showHome() {
     page = Page.HOME
     val root = stage()
     val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-    top.addView(text("Living World", 17f, true), LinearLayout.LayoutParams(0, dp(43), 1f))
-    top.addView(text("⌕  Search", 14f, true).apply {
-      background = surface()
-      setPadding(dp(15), dp(8), dp(15), dp(8))
-      isClickable = true
-      setOnClickListener { showApps(true) }
+    top.addView(text("Living World", 17f, true),
+      LinearLayout.LayoutParams(0, dp(46), 1f))
+    top.addView(smallAction("⌕ Search") { showApps(true) })
+    top.addView(View(this), LinearLayout.LayoutParams(dp(7), 1))
+    top.addView(smallAction("▧") { changeWallpaper() }.apply {
+      contentDescription = "Change Home wallpaper"
     })
     root.addView(top)
-    root.addView(View(this), LinearLayout.LayoutParams(1, 0, .12f))
-    clock = text("", if (cols() > 5) 68f else 58f, true)
-    date = text("", 18f)
-    root.addView(clock)
-    root.addView(date)
-    clock?.text = SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())
-    date?.text = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())
-    root.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+
+    val scroll = ScrollView(this).apply {
+      isFillViewport = true
+      isVerticalScrollBarEnabled = false
+      overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+    }
+    val content = LinearLayout(this).apply {
+      orientation = LinearLayout.VERTICAL
+      setPadding(0, dp(11), 0, dp(8))
+    }
+    scroll.addView(content)
+    root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+
+    if (homePage == 0) {
+      content.addView(View(this), LinearLayout.LayoutParams(1, dp(30)))
+      clock = text("", if (cols() >= 6) 63f else 54f, true)
+      date = text("", 18f)
+      content.addView(clock)
+      content.addView(date)
+      clock?.text = SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())
+      date?.text = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())
+      content.addView(View(this), LinearLayout.LayoutParams(1, 0, .65f))
+    } else {
+      content.addView(text("Home page " + (homePage + 1), 28f, true))
+      content.addView(UiKit.gap(this, 14))
+    }
+
     val installed = installed()
-    root.addView(text("YOUR SHORTCUTS", 12f, true, tint(225, 230, 239)))
-    root.addView(UiKit.gap(this, 8))
-    val favorites = (0..3).map {
-      resolve(prefs.getString("pinned_" + it, null) ?: pinnedDefault(it, installed), installed)
+    val favorites = (0 until pageSlots(homePage)).map { slot ->
+      val key = pinKey(homePage, slot)
+      val default = if (homePage == 0) pinnedDefault(slot, installed) else "empty"
+      resolve(prefs.getString(key, default) ?: default, installed)
     }
-    root.addView(grid(favorites) { index -> pickPinned(index) })
-    root.addView(text("Hold a shortcut to change it", 11f, false, tint(222, 226, 238)).apply {
-      gravity = Gravity.CENTER
+    content.addView(text("YOUR SHORTCUTS", 12f, true, tint(224, 231, 241)))
+    content.addView(UiKit.gap(this, 9))
+    val favoritesGrid = grid(favorites) { index -> pickPinned(index) }
+    favorites.forEachIndexed { index, shortcut ->
+      if (shortcut.id == "empty")
+        favoritesGrid.getChildAt(index).setOnClickListener { pickPinned(index) }
+    }
+    content.addView(favoritesGrid)
+    if (homePage == 0) content.addView(text("Hold to customize · Swipe left for more pages",
+      11f, false, tint(220, 228, 240)).apply { gravity = Gravity.CENTER })
+    content.addView(UiKit.gap(this, 12))
+
+    if (widgets.count(homePage) > 0) {
+      content.addView(text("WIDGETS", 12f, true, tint(224, 231, 241)))
+      content.addView(UiKit.gap(this, 7))
+      widgets.views(homePage) { showHome() }.forEach { view ->
+        content.addView(view, LinearLayout.LayoutParams(-1, dp(155)))
+        content.addView(UiKit.gap(this, 9))
+      }
+    }
+    if (homePage == 0) {
+      content.addView(View(this), LinearLayout.LayoutParams(1, 0, .35f))
+    }
+
+    val pager = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+    pager.addView(smallAction("‹") { jumpPage(homePage - 1) }.apply {
+      isEnabled = homePage > 0
+      alpha = if (homePage > 0) 1f else .35f
+      contentDescription = "Previous Home page"
     })
-    root.addView(UiKit.gap(this, 14))
-    val count = if (GoogleMessagesBridge.hasAccess(this)) BridgeInbox.snapshot().size else 0
-    if (count > 0) {
-      root.addView(menuRow(count.toString() + " new message notifications",
-        "Open your messages") { open(builtIn("messages")) })
-      root.addView(UiKit.gap(this, 12))
+    pager.addView(text((1..pageCount()).joinToString(" ") {
+      if (it - 1 == homePage) "●" else "○"
+    }, 20f, true).apply { gravity = Gravity.CENTER },
+      LinearLayout.LayoutParams(0, dp(40), 1f))
+    pager.addView(smallAction("›") { jumpPage(homePage + 1) }.apply {
+      isEnabled = homePage < pageCount() - 1
+      alpha = if (isEnabled) 1f else .35f
+      contentDescription = "Next Home page"
+    })
+    root.addView(pager)
+    val tools = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+    val addWidget = smallAction("+ Widget") { widgets.add(homePage) { showHome() } }
+    val addPage = smallAction("+ Page") { addPage() }
+    val customize = smallAction("⋯ Pages") {
+      val choices = if (homePage == 0)
+        arrayOf("Add Home page", "Change wallpaper", "Add widget")
+      else arrayOf("Add Home page", "Remove this page", "Change wallpaper", "Add widget")
+      AlertDialog.Builder(this).setTitle("Home screens")
+        .setItems(choices) { _, which ->
+          when (choices[which]) {
+            "Add Home page" -> addPage()
+            "Remove this page" -> removePage()
+            "Change wallpaper" -> changeWallpaper()
+            else -> widgets.add(homePage) { showHome() }
+          }
+        }.show()
     }
+    for (button in listOf(addWidget, addPage, customize)) {
+      tools.addView(button, LinearLayout.LayoutParams(0, dp(43), 1f).apply {
+        setMargins(dp(3), 0, dp(3), 0)
+      })
+    }
+    root.addView(tools)
+    root.addView(UiKit.gap(this, 9))
     dock(root)
   }
   private fun showApps(focus: Boolean) {
