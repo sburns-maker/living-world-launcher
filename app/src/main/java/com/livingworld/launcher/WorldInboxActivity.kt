@@ -2,6 +2,10 @@ package com.livingworld.launcher
 
 import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.os.Build
 import android.app.AlertDialog
 import android.content.pm.PackageManager
 import android.app.PendingIntent
@@ -83,6 +87,29 @@ class WorldInboxActivity : Activity() {
     override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
   }
   private val pictures = Executors.newFixedThreadPool(2)
+  private var profileLoading = false
+  private var localProfiles = emptyMap<String, ContactNameResolver.Profile>()
+  private var relayListening = false
+  private val relayReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      if (intent?.action == GoogleMessagesBridge.ACTION_UPDATED &&
+          ::rows.isInitialized && !showingConversation) render(worldThreads)
+    }
+  }
+  private fun loadProfiles() {
+    if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED ||
+        profileLoading || localProfiles.isNotEmpty()) return
+    profileLoading = true
+    pictures.execute {
+      val loaded = ContactNameResolver.snapshotProfiles(applicationContext)
+      runOnUiThread {
+        profileLoading = false
+        if (isFinishing || isDestroyed) return@runOnUiThread
+        localProfiles = loaded
+        if (::rows.isInitialized && !showingConversation) render(worldThreads)
+      }
+    }
+  }
   private val webBridge = object {
     @JavascriptInterface fun receiveInbox(json: String) {
       if (json.length > 75000) return
@@ -200,12 +227,26 @@ class WorldInboxActivity : Activity() {
     // cluttering the normal Messages interface.
     header.addView(UiKit.clickable(this, "⋮") {
       AlertDialog.Builder(this).setItems(arrayOf(
-        "Notification access", "Carrier SMS/MMS testing", "Open Google Messages"
+        "Notification access", "Contact names and photos",
+        "Open Google Messages", "Clear saved notification previews",
+        "Carrier SMS/MMS testing"
       )) { _, which ->
         when (which) {
           0 -> startActivity(GoogleMessagesBridge.settingsIntent())
-          1 -> startActivity(Intent(this, CarrierTestActivity::class.java))
-          else -> openRealMessages()
+          1 -> {
+            if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED)
+              requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 210)
+            else loadProfiles()
+          }
+          2 -> openRealMessages()
+          3 -> AlertDialog.Builder(this).setTitle("Clear local previews?")
+            .setMessage("This only deletes notification snippets saved in Living World. Your original messages in Google Messages are not affected.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Clear") { _, _ ->
+              RelayHistoryStore.clear(this)
+              render(worldThreads)
+            }.show()
+          4 -> startActivity(Intent(this, CarrierTestActivity::class.java))
         }
       }.show()
     })
@@ -321,7 +362,7 @@ class WorldInboxActivity : Activity() {
     root.addView(browser, LinearLayout.LayoutParams(-1, UiKit.dp(this, 2)))
     setWebMode(false)
     scheduleInboxProbe()
-    maybeRequestContacts()
+    // Contact access is explicitly requested from the overflow menu.
   }
 
   /**
@@ -825,32 +866,57 @@ class WorldInboxActivity : Activity() {
   }
   override fun onResume() {
     super.onResume()
+    if (!relayListening) {
+      val filter = IntentFilter(GoogleMessagesBridge.ACTION_UPDATED)
+      if (Build.VERSION.SDK_INT >= 33)
+        registerReceiver(relayReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+      else {
+        @Suppress("DEPRECATION")
+        registerReceiver(relayReceiver, filter)
+      }
+      relayListening = true
+    }
+    loadProfiles()
     if (::rows.isInitialized && !showingConversation) render(worldThreads)
+  }
+  override fun onPause() {
+    if (relayListening) {
+      unregisterReceiver(relayReceiver)
+      relayListening = false
+    }
+    super.onPause()
   }
   private fun renderRealNotifications(tiles: MutableList<InboxTile>) {
     val isDefault = SmsRole.isDefault(this)
     val allowed = GoogleMessagesBridge.hasAccess(this)
     // Once Living World becomes the SMS default, prefer provider-backed threads
     // and never duplicate old Google Messages notification previews.
-    val current = if (allowed && !isDefault) BridgeInbox.snapshot() else emptyList()
-    if (current.isNotEmpty()) {
-      current.forEach { item ->
-        val line = UiKit.horizontal(this)
-        val avatar = UiKit.text(this, item.sender.take(1), 20f, UiKit.ink, true).apply {
-          gravity = Gravity.CENTER
-          background = UiKit.surface(this@WorldInboxActivity, android.graphics.Color.rgb(228,238,249), 30)
+    if (allowed && !isDefault) {
+      val saved = RelayHistoryStore.threads(this)
+      val active = BridgeInbox.snapshot()
+      val fallback = active.filter { entry -> saved.none { it.id == entry.threadId } }
+        .map { RelayThread(it.threadId, it.sender, it.preview, it.postedAt, 1) }
+      (saved + fallback).distinctBy { it.id }.forEach { thread ->
+        val row = UiKit.horizontal(this)
+        val title = ContactNameResolver.display(thread.title,
+          localProfiles.mapValues { it.value.name })
+        val avatar = localContactAvatar(title, ContactNameResolver.photo(thread.title, localProfiles))
+        row.addView(avatar, LinearLayout.LayoutParams(UiKit.dp(this, 52), UiKit.dp(this, 52)))
+        val content = UiKit.vertical(this, 10).apply {
+          setPadding(UiKit.dp(this@WorldInboxActivity, 12), 0, 0, 0)
         }
-        line.addView(avatar, LinearLayout.LayoutParams(UiKit.dp(this, 52), UiKit.dp(this, 52)))
-        val detail = UiKit.vertical(this, 10)
-        detail.addView(UiKit.text(this, item.sender, 17f, UiKit.ink, true))
-        detail.addView(UiKit.text(this, item.preview, 13f, UiKit.muted).apply { maxLines = 2 })
-        line.addView(detail, LinearLayout.LayoutParams(0, -2, 1f))
-        line.isClickable = true
-        line.setOnClickListener {
+        val label = title + if (thread.unread > 0) "  • ${thread.unread}" else ""
+        content.addView(UiKit.text(this, label, 17f, UiKit.ink, thread.unread > 0))
+        content.addView(UiKit.text(this, thread.preview, 13f, UiKit.muted).apply {
+          maxLines = 2
+        })
+        row.addView(content, LinearLayout.LayoutParams(0, -2, 1f))
+        row.setOnClickListener {
+          RelayHistoryStore.markRead(this, thread.id)
           startActivity(Intent(this, BridgeConversationActivity::class.java)
-            .putExtra(BridgeConversationActivity.EXTRA_NOTIFICATION_KEY, item.notificationKey))
+            .putExtra(BridgeConversationActivity.EXTRA_THREAD_ID, thread.id))
         }
-        tiles.add(tile(line, item.postedAt))
+        tiles.add(tile(row, thread.lastAt))
       }
     }
     if (isDefault) {
@@ -884,7 +950,7 @@ class WorldInboxActivity : Activity() {
     }
     if (!allowed && !isDefault) {
       rows.addView(UiKit.text(this,
-        "Enable notification previews from ⋮ to see recent real messages here.",
+        "Enable Google Messages notification access in ⋮ to see recent real messages.",
         13f, UiKit.muted))
     }
   }
@@ -901,7 +967,11 @@ class WorldInboxActivity : Activity() {
     requestCode: Int, permissions: Array<out String>, grantResults: IntArray
   ) {
     super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-    if (requestCode == 210 && ::rows.isInitialized && !showingConversation) render(worldThreads)
+    if (requestCode == 210) {
+      localProfiles = emptyMap()
+      loadProfiles()
+      if (::rows.isInitialized && !showingConversation) render(worldThreads)
+    }
   }
 
   private fun openRealMessages() {
