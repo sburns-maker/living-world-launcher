@@ -46,6 +46,13 @@ import java.util.concurrent.Executors
 class WorldInboxActivity : Activity() {
   private data class Thread(val id: String, val name: String, val preview: String, val photo: String, val unread: Int, val lastAt: Long = 0L)
   private data class WorldMessage(val id: String, val text: String, val outgoing: Boolean, val at: Long, val photo: String)
+  private data class InboxTile(val at: Long, val view: View)
+  private fun tile(view: View, at: Long, gap: Int = 14): InboxTile {
+    val wrapper = UiKit.vertical(this)
+    wrapper.addView(view)
+    wrapper.addView(UiKit.gap(this, gap))
+    return InboxTile(at, wrapper)
+  }
   private var web: WebView? = null
   private lateinit var rows: LinearLayout
   private lateinit var inboxScroll: ScrollView
@@ -252,7 +259,6 @@ class WorldInboxActivity : Activity() {
     chatPage.addView(composerBar)
     root.addView(chatPage, LinearLayout.LayoutParams(-1, 0, 1f))
     rows.addView(UiKit.text(this, "Connecting to conversations…", 14f, UiKit.muted))
-    renderRealNotifications()
     val browser = WebView(this).apply {
       settings.javaScriptEnabled = true
       settings.domStorageEnabled = true
@@ -769,6 +775,7 @@ class WorldInboxActivity : Activity() {
     }
     worldThreads = updated
     rows.removeAllViews()
+    val tiles = mutableListOf<InboxTile>()
     if (!worldAuthenticated) {
       rows.addView(UiKit.text(this,
         "AI conversations aren't connected to this installation yet.", 14f, UiKit.muted))
@@ -802,10 +809,11 @@ class WorldInboxActivity : Activity() {
       detail.addView(UiKit.text(this, t.preview, 13f, UiKit.muted).apply { maxLines = 2 })
       line.addView(detail, LinearLayout.LayoutParams(0, -2, 1f))
       line.setOnClickListener { openNativeWorldChat(t) }
-      rows.addView(line)
-      rows.addView(UiKit.gap(this, 14))
+      tiles.add(tile(line, t.lastAt))
     }
-    renderRealNotifications()
+    renderRealNotifications(tiles)
+    // All native AI and real threads share one chronological inbox.
+    tiles.sortedByDescending { it.at }.forEach { rows.addView(it.view) }
     if (!showingConversation) {
       listPage.visibility = View.VISIBLE
       setWebMode(false)
@@ -819,11 +827,13 @@ class WorldInboxActivity : Activity() {
     super.onResume()
     if (::rows.isInitialized && !showingConversation) render(worldThreads)
   }
-  private fun renderRealNotifications() {
+  private fun renderRealNotifications(tiles: MutableList<InboxTile>) {
+    val isDefault = SmsRole.isDefault(this)
     val allowed = GoogleMessagesBridge.hasAccess(this)
-    val current = if (allowed) BridgeInbox.snapshot() else emptyList()
+    // Once Living World becomes the SMS default, prefer provider-backed threads
+    // and never duplicate old Google Messages notification previews.
+    val current = if (allowed && !isDefault) BridgeInbox.snapshot() else emptyList()
     if (current.isNotEmpty()) {
-      rows.addView(UiKit.gap(this, 10))
       current.forEach { item ->
         val line = UiKit.horizontal(this)
         val avatar = UiKit.text(this, item.sender.take(1), 20f, UiKit.ink, true).apply {
@@ -840,11 +850,10 @@ class WorldInboxActivity : Activity() {
           startActivity(Intent(this, BridgeConversationActivity::class.java)
             .putExtra(BridgeConversationActivity.EXTRA_NOTIFICATION_KEY, item.notificationKey))
         }
-        rows.addView(line)
-        rows.addView(UiKit.gap(this, 14))
+        tiles.add(tile(line, item.postedAt))
       }
     }
-    if (SmsRole.isDefault(this)) {
+    if (isDefault) {
       val profiles = ContactNameResolver.snapshotProfiles(this)
       val contacts = profiles.mapValues { it.value.name }
       if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
@@ -870,11 +879,10 @@ class WorldInboxActivity : Activity() {
           startActivity(Intent(this, SmsThreadActivity::class.java)
             .putExtra("threadId", sms.threadId).putExtra("address", sms.address))
         }
-        rows.addView(row)
-        rows.addView(UiKit.gap(this, 12))
+        tiles.add(tile(row, sms.timestamp, 12))
       }
     }
-    if (!allowed && !SmsRole.isDefault(this)) {
+    if (!allowed && !isDefault) {
       rows.addView(UiKit.text(this,
         "Enable notification previews from ⋮ to see recent real messages here.",
         13f, UiKit.muted))
