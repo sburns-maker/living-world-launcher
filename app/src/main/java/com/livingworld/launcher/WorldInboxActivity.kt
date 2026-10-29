@@ -9,6 +9,8 @@ import android.provider.Settings
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.util.LruCache
 import android.widget.EditText
 import android.widget.FrameLayout
 import org.json.JSONObject
@@ -34,13 +36,14 @@ import android.widget.Toast
 import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.Instant
 import java.util.concurrent.Executors
 
 /** Native character inbox fed from the game's already-authenticated web session.
  * WebView keeps the game's login; the bridge transmits display metadata, not credentials.
  */
 class WorldInboxActivity : Activity() {
-  private data class Thread(val id: String, val name: String, val preview: String, val photo: String, val unread: Int)
+  private data class Thread(val id: String, val name: String, val preview: String, val photo: String, val unread: Int, val lastAt: Long = 0L)
   private data class WorldMessage(val id: String, val text: String, val outgoing: Boolean, val at: Long, val photo: String)
   private var web: WebView? = null
   private lateinit var rows: LinearLayout
@@ -66,6 +69,10 @@ class WorldInboxActivity : Activity() {
   private var lastChatSignature: Int? = null
   private var lastInboxSignature: Int? = null
   private var worldThreads = emptyList<Thread>()
+  private val recentChatPreviews = mutableMapOf<String, Pair<Long, String>>()
+  private val portraitCache = object : LruCache<String, Bitmap>(6 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+  }
   private val pictures = Executors.newFixedThreadPool(2)
   private val webBridge = object {
     @JavascriptInterface fun receiveInbox(json: String) {
@@ -79,7 +86,9 @@ class WorldInboxActivity : Activity() {
           if (!Regex("^[a-fA-F0-9-]{36}$").matches(id)) continue
           items.add(Thread(id, o.optString("name").take(60),
             o.optString("preview").take(160), o.optString("photo").take(1400),
-            o.optInt("unread").coerceIn(0, 999)))
+            o.optInt("unread").coerceIn(0, 999),
+            runCatching { Instant.parse(o.optString("lastAt")).toEpochMilli() }
+              .getOrDefault(0L)))
         }
         items
       } catch (_: Exception) { return }
@@ -137,6 +146,16 @@ class WorldInboxActivity : Activity() {
       runOnUiThread {
         if (!isFinishing && !isDestroyed && selectedWorldThread?.id == payload.first) {
           chatBridgeLoaded = true
+          val newest = payload.second.maxByOrNull { it.at }
+          if (newest != null && newest.at > 0L) {
+            val snippet = newest.text.trim().ifBlank {
+              if (newest.photo.isNotBlank()) "Photo" else "Message"
+            }.take(160)
+            val preview = if (newest.outgoing) "You: $snippet" else snippet
+            val prior = recentChatPreviews[payload.first]
+            if (prior == null || newest.at >= prior.first)
+              recentChatPreviews[payload.first] = newest.at to preview
+          }
           renderAiMessages(payload.second)
         }
       }
@@ -718,7 +737,16 @@ class WorldInboxActivity : Activity() {
     }
   }
   private fun render(threads: List<Thread>) {
-    worldThreads = threads
+    val previousInboxPosition = if (::inboxScroll.isInitialized) inboxScroll.scrollY else 0
+    // Keep the latest confirmed native conversation snippet until the web inbox
+    // catches up after leaving a chat. This avoids showing an older preview.
+    val updated = threads.map { thread ->
+      val known = recentChatPreviews[thread.id]
+      if (known != null && known.first >= thread.lastAt)
+        thread.copy(preview = known.second, lastAt = known.first)
+      else thread
+    }
+    worldThreads = updated
     rows.removeAllViews()
     if (!worldAuthenticated) {
       rows.addView(UiKit.text(this,
@@ -734,7 +762,7 @@ class WorldInboxActivity : Activity() {
     } else if (threads.isEmpty()) {
       rows.addView(UiKit.text(this, "Connected — no AI conversations found.", 14f, UiKit.muted))
     }
-    for (t in threads) {
+    for (t in updated) {
       val line = UiKit.horizontal(this)
       val avatar = FrameLayout(this).apply {
         background = UiKit.surface(this@WorldInboxActivity,
@@ -760,6 +788,10 @@ class WorldInboxActivity : Activity() {
     if (!showingConversation) {
       listPage.visibility = View.VISIBLE
       setWebMode(false)
+    }
+    inboxScroll.post {
+      if (!isFinishing && !isDestroyed && !showingConversation)
+        inboxScroll.scrollTo(0, previousInboxPosition)
     }
   }
   override fun onResume() {
