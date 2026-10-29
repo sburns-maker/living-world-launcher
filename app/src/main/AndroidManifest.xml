@@ -2,10 +2,72 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.READ_CONTACTS" />
-  <queries><package android:name="com.google.android.apps.messaging"/><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent></queries>
+  <!-- Used only if Android explicitly grants this app the default SMS role. -->
+  <uses-permission android:name="android.permission.READ_SMS" />
+  <uses-permission android:name="android.permission.SEND_SMS" />
+  <uses-permission android:name="android.permission.RECEIVE_SMS" />
+  <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+  <uses-permission android:name="android.permission.RECEIVE_MMS" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <queries>
+    <package android:name="com.google.android.apps.messaging"/>
+    <!-- Required for Telephony.Sms.getDefaultSmsPackage on Android 11+. -->
+    <intent><action android:name="android.provider.Telephony.SMS_DELIVER"/></intent>
+    <intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent>
+  </queries>
   <application android:allowBackup="false" android:label="Living World Home" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <provider android:name=".MmsDownloadProvider"
+      android:authorities="com.livingworld.launcher.mmsdownloads"
+      android:exported="false" android:grantUriPermissions="true" />
+    <receiver android:name=".MmsDownloadResultReceiver" android:exported="false" />
+    <receiver android:name=".MmsRetryReceiver" android:exported="false" />
+    <receiver android:name=".MmsBootReceiver" android:exported="false">
+      <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED" /></intent-filter>
+    </receiver>
+    <receiver android:name=".IncomingSmsReceiver" android:exported="true"
+      android:permission="android.permission.BROADCAST_SMS">
+      <intent-filter><action android:name="android.provider.Telephony.SMS_DELIVER" /></intent-filter>
+    </receiver>
+    <receiver android:name=".IncomingMmsReceiver" android:exported="true" android:permission="android.permission.BROADCAST_WAP_PUSH"><intent-filter><action android:name="android.provider.Telephony.WAP_PUSH_DELIVER"/><data android:mimeType="application/vnd.wap.mms-message"/></intent-filter></receiver>
+    <receiver android:name=".MmsSentResultReceiver" android:exported="false" />
+    <receiver android:name=".SmsNotificationReplyReceiver" android:exported="false" />
+    <receiver android:name=".SmsSentResultReceiver" android:exported="false" />
+    <receiver android:name=".SmsDeliveryResultReceiver" android:exported="false" />
     <service android:name=".GoogleMessagesBridge" android:label="Living World message previews" android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true"><intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter></service>
+    <service android:name=".SmsRespondService" android:exported="true"
+      android:permission="android.permission.SEND_RESPOND_VIA_MESSAGE">
+      <intent-filter>
+        <action android:name="android.intent.action.RESPOND_VIA_MESSAGE" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:scheme="sms" /><data android:scheme="smsto" />
+        <data android:scheme="mms" /><data android:scheme="mmsto" />
+      </intent-filter>
+    </service>
+    <activity android:name=".SmsComposeActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.SENDTO" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:scheme="sms" /><data android:scheme="smsto" />
+        <data android:scheme="mms" /><data android:scheme="mmsto" />
+      </intent-filter>
+    </activity>
+    <activity android:name=".MmsOfflineCheckActivity" android:exported="false" />
+    <activity android:name=".CarrierTestActivity" android:exported="false" />
+    <activity android:name=".SmsThreadActivity" android:exported="false" />
+    <activity android:name=".WorldOAuthCallbackActivity"
+      android:exported="true" android:noHistory="true">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="livingworld" android:host="auth" />
+      </intent-filter>
+    </activity>
+    <activity android:name=".BridgeConversationActivity" android:exported="false" />
+    <activity android:name=".WorldPhotoViewerActivity" android:exported="false" />
     <activity android:name=".WorldInboxActivity" android:exported="false" />
+    <activity android:name=".PhoneHubActivity" android:exported="false" />
     <activity android:name=".UnifiedContactsActivity" android:exported="false" />
     <activity android:name=".UnifiedMessagesActivity" android:exported="false" />
     <activity android:name=".LauncherActivity" android:exported="true" android:launchMode="singleTask">
