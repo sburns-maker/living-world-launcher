@@ -46,6 +46,8 @@ import android.widget.Toast
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.Executors
+import android.os.SystemClock
 
 /**
  * Native Android HOME shell. Installed applications are launched using LauncherApps,
@@ -57,6 +59,17 @@ class LauncherActivity : Activity() {
   private val launcher by lazy { getSystemService(LauncherApps::class.java) }
   private val prefs by lazy { getSharedPreferences("living_world_home_v1", MODE_PRIVATE) }
   private val handler = Handler(Looper.getMainLooper())
+  // Package scanning and icon IO must never stall the main thread or drawer.
+  private val appWorker = Executors.newSingleThreadExecutor()
+  private var cachedApps = emptyList<LauncherActivityInfo>()
+  private var appsLoaded = false
+  private var lastAppLoad = 0L
+  private var loadingApps = false
+  private var drawerRefresh: (() -> Unit)? = null
+  private val iconCache = mutableMapOf<String, Drawable.ConstantState>()
+  private val iconLoading = mutableSetOf<String>()
+  private val iconWatchers = mutableMapOf<String, MutableList<ImageView>>()
+
   private val widgets by lazy { HomeWidgets(this, prefs) }
   private var homePage = 0
   private var drawerIndex = 0
@@ -140,6 +153,7 @@ class LauncherActivity : Activity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    requestApps()
     window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
       WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
     filter = savedInstanceState?.getString("drawerFilter").orEmpty()
@@ -194,20 +208,77 @@ class LauncherActivity : Activity() {
     homePage = 0
     showHome()
   }
+  override fun onDestroy() {
+    drawerRefresh = null
+    iconWatchers.clear()
+    appWorker.shutdownNow()
+    super.onDestroy()
+  }
   @Deprecated("Deprecated in Java")
   override fun onBackPressed() {
     if (page != Page.HOME) showHome() else super.onBackPressed()
   }
 
-  private fun installed() = try {
-    launcher.getActivityList(null, Process.myUserHandle())
-      .filter { it.componentName.packageName != packageName }
-      .sortedBy { it.label.toString().lowercase(Locale.getDefault()) }
-  } catch (_: Exception) { emptyList<LauncherActivityInfo>() }
-
+  private fun installed(): List<LauncherActivityInfo> {
+    // Return already loaded metadata instantly. Cold startup loads it once
+    // asynchronously and signals whichever screen is currently visible.
+    requestApps()
+    return cachedApps
+  }
+  private fun requestApps(force: Boolean = false) {
+    val now = SystemClock.elapsedRealtime()
+    if (loadingApps || (!force && appsLoaded && now - lastAppLoad < 90_000L)) return
+    loadingApps = true
+    appWorker.execute {
+      val list = try {
+        launcher.getActivityList(null, Process.myUserHandle())
+          .filter { it.componentName.packageName != packageName }
+          .sortedBy { it.label.toString().lowercase(Locale.getDefault()) }
+      } catch (_: Exception) { emptyList<LauncherActivityInfo>() }
+      runOnUiThread {
+        if (isFinishing || isDestroyed) return@runOnUiThread
+        val changed = !appsLoaded ||
+          list.map { it.componentName } != cachedApps.map { it.componentName }
+        cachedApps = list
+        appsLoaded = true
+        loadingApps = false
+        lastAppLoad = SystemClock.elapsedRealtime()
+        if (changed) {
+          if (page == Page.APPS) drawerRefresh?.invoke()
+          else if (page == Page.HOME) showHome()
+        }
+      }
+    }
+  }
   private fun systemApp(app: LauncherActivityInfo) =
     Shortcut("app:" + app.componentName.flattenToString(), app.label.toString(),
-      runCatching { app.getIcon(0) }.getOrNull(), tint(61, 73, 108))
+      null, tint(61, 73, 108))
+  private fun loadAppIcon(id: String, view: ImageView) {
+    val cached = iconCache[id]
+    if (cached != null) {
+      view.setImageDrawable(cached.newDrawable(resources))
+      return
+    }
+    iconWatchers.getOrPut(id) { mutableListOf() }.add(view)
+    if (!iconLoading.add(id)) return
+    val info = cachedApps.firstOrNull {
+      "app:" + it.componentName.flattenToString() == id
+    } ?: run { iconLoading.remove(id); return }
+    appWorker.execute {
+      val state = runCatching { info.getIcon(0)?.constantState }.getOrNull()
+      runOnUiThread {
+        iconLoading.remove(id)
+        if (state != null) iconCache[id] = state
+        iconWatchers.remove(id)?.forEach { target ->
+          if (state != null && target.isAttachedToWindow) {
+            target.setImageDrawable(state.newDrawable(resources))
+            (target.parent as? FrameLayout)?.findViewWithTag<View>("initial")?.visibility = View.GONE
+          }
+        }
+      }
+    }
+  }
+
   private fun builtIn(name: String): Shortcut = when (name) {
     "world" -> Shortcut(name, "Living World", getDrawable(R.drawable.ic_world), tint(112, 82, 190))
     "phone" -> Shortcut(name, "Phone", getDrawable(R.drawable.ic_phone), tint(24, 150, 126))
@@ -419,16 +490,22 @@ class LauncherActivity : Activity() {
       background = surface(item.color, 17)
       elevation = dp(2).toFloat()
     }
-    if (item.icon != null) {
-      shell.addView(ImageView(this).apply {
-        setImageDrawable(item.icon)
+    val resolved = item.icon ?:
+      (if (item.id.startsWith("app:")) iconCache[item.id]?.newDrawable(resources) else null)
+    if (resolved == null) {
+      shell.addView(text(item.label.take(1).uppercase(), 24f, true).apply {
+        gravity = Gravity.CENTER
+        tag = "initial"
+      }, FrameLayout.LayoutParams(dp(size), dp(size), Gravity.CENTER))
+    }
+    if (resolved != null || item.id.startsWith("app:")) {
+      val icon = ImageView(this).apply {
         scaleType = ImageView.ScaleType.FIT_CENTER
         setPadding(dp(9), dp(9), dp(9), dp(9))
-      }, FrameLayout.LayoutParams(dp(size), dp(size), Gravity.CENTER))
-    } else {
-      shell.addView(text(item.label.take(1), 24f, true).apply {
-        gravity = Gravity.CENTER
-      }, FrameLayout.LayoutParams(dp(size), dp(size), Gravity.CENTER))
+        if (resolved != null) setImageDrawable(resolved)
+      }
+      shell.addView(icon, FrameLayout.LayoutParams(dp(size), dp(size), Gravity.CENTER))
+      if (resolved == null && item.id.startsWith("app:")) loadAppIcon(item.id, icon)
     }
     return shell
   }
