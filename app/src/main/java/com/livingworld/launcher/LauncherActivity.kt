@@ -76,6 +76,41 @@ class LauncherActivity : Activity() {
     }
   }
 
+  // The original fixed clock remains visible on upgrade, until changed.
+  // 0 = top, 1 = beneath shortcuts, 2 = hidden.
+  private fun clockPosition() = prefs.getInt("home_clock_position", 0).coerceIn(0, 2)
+  private fun clockMenu() {
+    val choices = arrayOf("Clock at top", "Move below shortcuts", "Hide clock and date")
+    AlertDialog.Builder(this).setTitle("Clock and date")
+      .setSingleChoiceItems(choices, clockPosition()) { dialog, choice ->
+        dialog.dismiss()
+        prefs.edit().putInt("home_clock_position", choice).apply()
+        showHome()
+      }.setNegativeButton("Cancel", null).show()
+  }
+  private fun customizeHome() {
+    val options = if (homePage == 0) {
+      arrayOf("Wallpaper", "Add widget", "Clock and date", "Add Home page", "Edit shortcuts")
+    } else {
+      arrayOf("Wallpaper", "Add widget", "Clock and date", "Add Home page",
+        "Remove this page", "Edit shortcuts")
+    }
+    AlertDialog.Builder(this).setTitle("Customize Home")
+      .setItems(options) { _, index ->
+        when (options[index]) {
+          "Wallpaper" -> changeWallpaper()
+          "Add widget" -> widgets.add(homePage) { showHome() }
+          "Clock and date" -> clockMenu()
+          "Add Home page" -> addPage()
+          "Remove this page" -> removePage()
+          else -> AlertDialog.Builder(this).setTitle("Choose shortcut to edit")
+            .setItems((1..pageSlots(homePage)).map { "Shortcut " + it }.toTypedArray()) {
+              _, slot -> pickPinned(slot)
+            }.setNegativeButton("Cancel", null).show()
+        }
+      }.setNegativeButton("Cancel", null).show()
+  }
+
   private fun pageCount() = prefs.getInt("home_page_count", 1).coerceIn(1, 6)
   private fun pinKey(page: Int, slot: Int) =
     if (page == 0) "pinned_" + slot else "pinned_page_" + page + "_" + slot
@@ -563,10 +598,6 @@ class LauncherActivity : Activity() {
     top.addView(text("Living World", 17f, true),
       LinearLayout.LayoutParams(0, dp(46), 1f))
     top.addView(smallAction("⌕ Search") { showApps(true) })
-    top.addView(View(this), LinearLayout.LayoutParams(dp(7), 1))
-    top.addView(smallAction("▧") { changeWallpaper() }.apply {
-      contentDescription = "Change Home wallpaper"
-    })
     root.addView(top)
 
     val scroll = ScrollView(this).apply {
@@ -577,22 +608,41 @@ class LauncherActivity : Activity() {
     val content = LinearLayout(this).apply {
       orientation = LinearLayout.VERTICAL
       setPadding(0, dp(11), 0, dp(8))
+      isLongClickable = true
+      setOnLongClickListener { customizeHome(); true }
     }
     scroll.addView(content)
     root.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
 
-    if (homePage == 0) {
-      content.addView(View(this), LinearLayout.LayoutParams(1, dp(30)))
+    val clockPlace = clockPosition()
+    fun addClock() {
+      val clockGroup = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        isLongClickable = true
+        contentDescription = "Clock and date. Long press to move or hide."
+        setOnLongClickListener { clockMenu(); true }
+      }
       clock = text("", if (cols() >= 6) 63f else 54f, true)
       date = text("", 18f)
-      content.addView(clock)
-      content.addView(date)
+      clockGroup.addView(clock)
+      clockGroup.addView(date)
       clock?.text = SimpleDateFormat("h:mm", Locale.getDefault()).format(Date())
       date?.text = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())
-      content.addView(View(this), LinearLayout.LayoutParams(1, 0, .65f))
-    } else {
+      content.addView(clockGroup)
+    }
+    if (homePage == 0 && clockPlace == 0) {
+      content.addView(UiKit.gap(this, 26))
+      addClock()
+    } else if (homePage != 0) {
       content.addView(text("Home page " + (homePage + 1), 28f, true))
       content.addView(UiKit.gap(this, 14))
+    }
+    if (homePage == 0) {
+      content.addView(View(this).apply {
+        isLongClickable = true
+        contentDescription = "Long press to customize Home"
+        setOnLongClickListener { customizeHome(); true }
+      }, LinearLayout.LayoutParams(1, 0, 1f))
     }
 
     val installed = installed()
@@ -609,8 +659,10 @@ class LauncherActivity : Activity() {
         favoritesGrid.getChildAt(index).setOnClickListener { pickPinned(index) }
     }
     content.addView(favoritesGrid)
-    if (homePage == 0) content.addView(text("Hold to customize · Swipe left for more pages",
-      11f, false, tint(220, 228, 240)).apply { gravity = Gravity.CENTER })
+    if (homePage == 0 && clockPlace == 1) {
+      content.addView(UiKit.gap(this, 14))
+      addClock()
+    }
     content.addView(UiKit.gap(this, 12))
 
     if (widgets.count(homePage) > 0) {
@@ -625,46 +677,19 @@ class LauncherActivity : Activity() {
       content.addView(View(this), LinearLayout.LayoutParams(1, 0, .35f))
     }
 
-    val pager = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-    pager.addView(smallAction("‹") { jumpPage(homePage - 1) }.apply {
-      isEnabled = homePage > 0
-      alpha = if (homePage > 0) 1f else .35f
-      contentDescription = "Previous Home page"
-    })
-    pager.addView(text((1..pageCount()).joinToString(" ") {
+    // Editing controls are in the long-press Customize Home menu.
+    val indicators = text((1..pageCount()).joinToString("  ") {
       if (it - 1 == homePage) "●" else "○"
-    }, 20f, true).apply { gravity = Gravity.CENTER },
-      LinearLayout.LayoutParams(0, dp(40), 1f))
-    pager.addView(smallAction("›") { jumpPage(homePage + 1) }.apply {
-      isEnabled = homePage < pageCount() - 1
-      alpha = if (isEnabled) 1f else .35f
-      contentDescription = "Next Home page"
-    })
-    root.addView(pager)
-    val tools = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-    val addWidget = smallAction("+ Widget") { widgets.add(homePage) { showHome() } }
-    val addPage = smallAction("+ Page") { addPage() }
-    val customize = smallAction("⋯ Pages") {
-      val choices = if (homePage == 0)
-        arrayOf("Add Home page", "Change wallpaper", "Add widget")
-      else arrayOf("Add Home page", "Remove this page", "Change wallpaper", "Add widget")
-      AlertDialog.Builder(this).setTitle("Home screens")
-        .setItems(choices) { _, which ->
-          when (choices[which]) {
-            "Add Home page" -> addPage()
-            "Remove this page" -> removePage()
-            "Change wallpaper" -> changeWallpaper()
-            else -> widgets.add(homePage) { showHome() }
-          }
-        }.show()
+    }, 17f, true).apply {
+      gravity = Gravity.CENTER
+      isLongClickable = true
+      contentDescription = "Home page " + (homePage + 1) + " of " + pageCount() +
+        ". Long press to customize."
+      setOnLongClickListener { customizeHome(); true }
+      setOnClickListener { customizeHome() }
     }
-    for (button in listOf(addWidget, addPage, customize)) {
-      tools.addView(button, LinearLayout.LayoutParams(0, dp(43), 1f).apply {
-        setMargins(dp(3), 0, dp(3), 0)
-      })
-    }
-    root.addView(tools)
-    root.addView(UiKit.gap(this, 9))
+    root.addView(indicators, LinearLayout.LayoutParams(-1, dp(36)))
+    root.addView(UiKit.gap(this, 6))
     dock(root)
   }
   private fun updateDrawerDots() {
