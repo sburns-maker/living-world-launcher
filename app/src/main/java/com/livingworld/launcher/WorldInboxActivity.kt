@@ -66,6 +66,8 @@ class WorldInboxActivity : Activity() {
   private lateinit var chatMessages: LinearLayout
   private lateinit var chatScroll: ScrollView
   private lateinit var aiComposer: EditText
+  private lateinit var chatTitle: android.widget.TextView
+  private var chatHeaderPortrait: ImageView? = null
   private lateinit var aiStatus: android.widget.TextView
   private var selectedWorldThread: Thread? = null
   private var signingIn = false
@@ -264,18 +266,56 @@ class WorldInboxActivity : Activity() {
       visibility = View.GONE
       isFocusableInTouchMode = true
     }
-    val chatHeader = UiKit.horizontal(this)
-    chatHeader.addView(UiKit.clickable(this, "‹") { showNative() })
-    val title = UiKit.text(this, "Conversation", 19f, UiKit.ink, true)
-    title.tag = "chat-title"
-    chatHeader.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
-    chatHeader.addView(UiKit.clickable(this, "⋯") {
-      selectedWorldThread?.let { thread ->
-        showBrowser(WorldBackend.ORIGIN + "/chat/" + thread.id)
+    val chatHeader = UiKit.horizontal(this).apply {
+      setPadding(UiKit.dp(this@WorldInboxActivity, 6), UiKit.dp(this@WorldInboxActivity, 4),
+        UiKit.dp(this@WorldInboxActivity, 6), UiKit.dp(this@WorldInboxActivity, 4))
+    }
+    val back = UiKit.text(this, "‹", 28f, UiKit.ink).apply {
+      gravity = Gravity.CENTER
+      minWidth = UiKit.dp(this@WorldInboxActivity, 48)
+      minHeight = UiKit.dp(this@WorldInboxActivity, 48)
+      contentDescription = "Back to Messages"
+      setOnClickListener { showNative() }
+    }
+    chatHeader.addView(back)
+    val avatarFrame = FrameLayout(this).apply {
+      background = UiKit.surface(this@WorldInboxActivity, Color.rgb(233, 230, 247), 25)
+      clipToOutline = true
+    }
+    avatarFrame.addView(UiKit.text(this, "•", 23f, UiKit.lavender, true).apply {
+      gravity = Gravity.CENTER
+    }, FrameLayout.LayoutParams(-1, -1))
+    val photo = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+    avatarFrame.addView(photo, FrameLayout.LayoutParams(-1, -1))
+    chatHeaderPortrait = photo
+    chatHeader.addView(avatarFrame, LinearLayout.LayoutParams(
+      UiKit.dp(this, 40), UiKit.dp(this, 40)))
+    chatTitle = UiKit.text(this, "Conversation", 19f, UiKit.ink, true).apply {
+      setPadding(UiKit.dp(this@WorldInboxActivity, 12), 0, 0, 0)
+      maxLines = 1
+      ellipsize = android.text.TextUtils.TruncateAt.END
+    }
+    chatHeader.addView(chatTitle, LinearLayout.LayoutParams(0, -2, 1f))
+    val more = UiKit.text(this, "⋮", 23f, UiKit.ink).apply {
+      gravity = Gravity.CENTER
+      minWidth = UiKit.dp(this@WorldInboxActivity, 48)
+      minHeight = UiKit.dp(this@WorldInboxActivity, 48)
+      contentDescription = "More conversation options"
+      setOnClickListener {
+        selectedWorldThread?.let { thread ->
+          AlertDialog.Builder(this@WorldInboxActivity).setItems(
+            arrayOf("Open full Living World conversation")) { _, _ ->
+            showBrowser(WorldBackend.ORIGIN + "/chat/" + thread.id)
+          }.show()
+        }
       }
-    })
+    }
+    chatHeader.addView(more)
     chatPage.addView(chatHeader)
-    aiStatus = UiKit.text(this, "Loading AI conversation…", 12f, UiKit.muted)
+    aiStatus = UiKit.text(this, "Loading messages…", 11f, UiKit.muted).apply {
+      setPadding(UiKit.dp(this@WorldInboxActivity, 14), 0,
+        UiKit.dp(this@WorldInboxActivity, 14), 0)
+    }
     chatPage.addView(aiStatus)
     chatScroll = ScrollView(this).apply {
       isFillViewport = true
@@ -285,18 +325,33 @@ class WorldInboxActivity : Activity() {
     chatMessages = UiKit.vertical(this, 10)
     chatScroll.addView(chatMessages)
     chatPage.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
-    val composerBar = UiKit.horizontal(this)
+    val composerBar = UiKit.horizontal(this).apply {
+      setPadding(UiKit.dp(this@WorldInboxActivity, 10), UiKit.dp(this@WorldInboxActivity, 4),
+        UiKit.dp(this@WorldInboxActivity, 10), UiKit.dp(this@WorldInboxActivity, 8))
+    }
     aiComposer = EditText(this).apply {
-      hint = "Message…"
+      hint = "Message"
       minLines = 1
       maxLines = 5
       setSingleLine(false)
-      setPadding(UiKit.dp(this@WorldInboxActivity, 14), UiKit.dp(this@WorldInboxActivity, 9),
-        UiKit.dp(this@WorldInboxActivity, 14), UiKit.dp(this@WorldInboxActivity, 9))
-      background = UiKit.surface(this@WorldInboxActivity)
+      textSize = 16f
+      setPadding(UiKit.dp(this@WorldInboxActivity, 16), UiKit.dp(this@WorldInboxActivity, 11),
+        UiKit.dp(this@WorldInboxActivity, 16), UiKit.dp(this@WorldInboxActivity, 11))
+      background = UiKit.surface(this@WorldInboxActivity, Color.WHITE, 26)
     }
     composerBar.addView(aiComposer, LinearLayout.LayoutParams(0, -2, 1f))
-    composerBar.addView(UiKit.clickable(this, "Send") { sendAiText() })
+    val send = UiKit.text(this, "➤", 21f, Color.WHITE, true).apply {
+      gravity = Gravity.CENTER
+      contentDescription = "Send message"
+      background = UiKit.surface(this@WorldInboxActivity, Color.rgb(47, 107, 215), 26)
+      minHeight = UiKit.dp(this@WorldInboxActivity, 48)
+      minWidth = UiKit.dp(this@WorldInboxActivity, 48)
+      setOnClickListener { sendAiText() }
+    }
+    composerBar.addView(send, LinearLayout.LayoutParams(
+      UiKit.dp(this, 48), UiKit.dp(this, 48)).apply {
+      leftMargin = UiKit.dp(this@WorldInboxActivity, 8)
+    })
     chatPage.addView(composerBar)
     root.addView(chatPage, LinearLayout.LayoutParams(-1, 0, 1f))
     rows.addView(UiKit.text(this, "Connecting to conversations…", 14f, UiKit.muted))
@@ -688,8 +743,11 @@ class WorldInboxActivity : Activity() {
     chatScroll.scrollTo(0, 0)
     aiStatus.text = "Loading messages…"
     chatMessages.removeAllViews()
-    val header = chatPage.getChildAt(0) as? LinearLayout
-    (header?.getChildAt(1) as? android.widget.TextView)?.text = thread.name
+    chatTitle.text = thread.name
+    chatHeaderPortrait?.apply {
+      setImageDrawable(null)
+      loadPhoto(this, thread.photo)
+    }
     web?.loadUrl(WorldBackend.ORIGIN + "/chat/" + thread.id)
     scheduleChatProbe(thread.id)
     scheduleNativeChatProbe(thread.id)
@@ -750,6 +808,7 @@ class WorldInboxActivity : Activity() {
       else "Preview only · Full chat available under ⋯"
     if (lastChatSignature == fingerprint) {
       aiStatus.text = status
+      aiStatus.visibility = if (chatBridgeLoaded) View.GONE else View.VISIBLE
       return
     }
 
@@ -779,16 +838,23 @@ class WorldInboxActivity : Activity() {
           adjustViewBounds = false
           scaleType = ImageView.ScaleType.FIT_CENTER
           background = UiKit.surface(this@WorldInboxActivity,
-            Color.rgb(239, 236, 245), 14)
+            Color.rgb(239, 236, 245), 18)
+          isClickable = true
+          isFocusable = true
+          contentDescription = "Open photo full screen"
+          setOnClickListener {
+            startActivity(Intent(this@WorldInboxActivity, WorldPhotoViewerActivity::class.java)
+              .putExtra(WorldPhotoViewerActivity.EXTRA_URL, message.photo))
+          }
         }
         val container = UiKit.vertical(this, 5).apply {
           gravity = if (message.outgoing) Gravity.END else Gravity.START
         }
-        // Reserve space *before* an asynchronous image loads. Otherwise the
-        // image forces the whole scroll view to jump while someone is reading.
+        val widthPx = minOf(UiKit.dp(this, 285),
+          (resources.displayMetrics.widthPixels * .76f).toInt())
         container.addView(media, LinearLayout.LayoutParams(
-          UiKit.dp(this, 235), UiKit.dp(this, 235)))
-        loadAiPhoto(media, message.photo)
+          widthPx, UiKit.dp(this, 220)))
+        loadAiPhoto(media, message.photo, widthPx)
         if (message.text.isNotBlank()) container.addView(bubble)
         row.addView(container)
       } else row.addView(bubble)
@@ -796,6 +862,7 @@ class WorldInboxActivity : Activity() {
       chatMessages.addView(UiKit.gap(this, 6))
     }
     aiStatus.text = status
+    aiStatus.visibility = if (chatBridgeLoaded) View.GONE else View.VISIBLE
     val expectedConversation = selectedWorldThread?.id
     chatScroll.post {
       if (isFinishing || isDestroyed || !showingConversation ||
@@ -1011,38 +1078,31 @@ class WorldInboxActivity : Activity() {
     return avatar
   }
 
-  private fun loadAiPhoto(view: ImageView, url: String) {
-    val resolved = if (url.startsWith("/")) WorldBackend.ORIGIN + url else url
-    val uri = Uri.parse(resolved)
-    if (uri.scheme != "https" || uri.host.isNullOrBlank()) return
+  private fun loadAiPhoto(view: ImageView, url: String, desiredWidth: Int) {
+    if (WorldImageLoader.resolve(url) == null) return
     pictures.execute {
-      try {
-        val connection = URL(resolved).openConnection() as HttpURLConnection
-        connection.connectTimeout = 6500
-        connection.readTimeout = 6500
-        connection.instanceFollowRedirects = false
-        if (connection.responseCode != 200 || connection.contentLengthLong > 4000000) {
-          connection.disconnect()
-          return@execute
+      val bitmap = runCatching {
+        WorldImageLoader.fetch(url)?.bitmap(1600)
+      }.getOrNull()
+      runOnUiThread {
+        if (isFinishing || isDestroyed || !view.isAttachedToWindow) {
+          bitmap?.recycle()
+          return@runOnUiThread
         }
-        val bytes = connection.inputStream.use { input ->
-          val output = java.io.ByteArrayOutputStream()
-          val buffer = ByteArray(8192)
-          while (output.size() <= 4000000) {
-            val count = input.read(buffer)
-            if (count < 0) break
-            output.write(buffer, 0, count)
-          }
-          output.toByteArray()
+        if (bitmap == null) {
+          view.contentDescription = "Photo unavailable; tap to retry full-screen"
+          return@runOnUiThread
         }
-        connection.disconnect()
-        if (bytes.size > 4000000) return@execute
-        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
-          BitmapFactory.Options().apply { inSampleSize = 4 }) ?: return@execute
-        runOnUiThread {
-          if (!isFinishing && !isDestroyed) view.setImageBitmap(bitmap)
+        // Proportional message photos, never a compressed tiny square.
+        val naturalHeight = desiredWidth * (bitmap.height.toFloat() / bitmap.width.coerceAtLeast(1))
+        val height = naturalHeight.toInt().coerceIn(
+          UiKit.dp(this, 120), UiKit.dp(this, 420))
+        view.layoutParams = (view.layoutParams as LinearLayout.LayoutParams).apply {
+          width = desiredWidth
+          this.height = height
         }
-      } catch (_: Exception) { }
+        view.setImageBitmap(bitmap)
+      }
     }
   }
 
