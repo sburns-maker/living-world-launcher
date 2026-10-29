@@ -49,6 +49,7 @@ class WorldInboxActivity : Activity() {
   private lateinit var rows: LinearLayout
   private lateinit var inboxScroll: ScrollView
   private lateinit var listPage: LinearLayout
+  private lateinit var globalBack: View
   private lateinit var chatPage: LinearLayout
   private lateinit var chatMessages: LinearLayout
   private lateinit var chatScroll: ScrollView
@@ -176,9 +177,10 @@ class WorldInboxActivity : Activity() {
       View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
     val root = UiKit.vertical(this).apply { fitsSystemWindows = true }
     setContentView(root)
-    root.addView(UiKit.clickable(this, "‹  Messages") {
+    globalBack = UiKit.clickable(this, "‹  Messages") {
       if (showingConversation) showNative() else finish()
-    })
+    }
+    root.addView(globalBack)
     listPage = UiKit.vertical(this, 16).apply { setBackgroundColor(UiKit.bg) }
     val header = UiKit.horizontal(this)
     header.addView(UiKit.text(this, "Messages", 28f, UiKit.ink, true), LinearLayout.LayoutParams(0, -2, 1f))
@@ -589,6 +591,7 @@ class WorldInboxActivity : Activity() {
     signingIn = false
     selectedWorldThread = null
     chatPage.visibility = View.GONE
+    globalBack.visibility = View.VISIBLE
     listPage.visibility = View.VISIBLE
     setWebMode(false)
     web?.loadUrl(WorldBackend.INBOX_URL)
@@ -601,6 +604,7 @@ class WorldInboxActivity : Activity() {
     signingIn = true
     bridgeDiagnostic = "Waiting for the published Living World website to sync…"
     listPage.visibility = View.GONE
+    globalBack.visibility = View.GONE
     chatPage.visibility = View.GONE
     setWebMode(true)
     web?.loadUrl(url)
@@ -614,6 +618,7 @@ class WorldInboxActivity : Activity() {
     signingIn = false
     lastChatSignature = null
     listPage.visibility = View.GONE
+    globalBack.visibility = View.GONE
     chatPage.visibility = View.VISIBLE
     setWebMode(false)
     hideComposerKeyboard()
@@ -730,8 +735,10 @@ class WorldInboxActivity : Activity() {
       chatMessages.addView(UiKit.gap(this, 6))
     }
     aiStatus.text = status
+    val expectedConversation = selectedWorldThread?.id
     chatScroll.post {
-      if (isFinishing || isDestroyed || !showingConversation) return@post
+      if (isFinishing || isDestroyed || !showingConversation ||
+          selectedWorldThread?.id != expectedConversation) return@post
       if (followLatest) chatScroll.fullScroll(View.FOCUS_DOWN)
       else chatScroll.scrollTo(0, previousPosition)
     }
