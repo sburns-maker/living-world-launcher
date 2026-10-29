@@ -113,7 +113,7 @@ class WorldInboxActivity : Activity() {
       }
     }
     @JavascriptInterface fun receiveMessages(json: String) {
-      if (json.length > 250000) return
+      if (json.length > 650000) return
       val payload = try {
         val data = JSONObject(json)
         val id = data.optString("conversationId")
@@ -245,7 +245,10 @@ class WorldInboxActivity : Activity() {
             val path = Uri.parse(url).path.orEmpty()
             if (path == "/inbox") scheduleInboxProbe()
             else if (path.startsWith("/chat/")) selectedWorldThread?.let {
-              if (path == "/chat/" + it.id) scheduleChatProbe(it.id)
+              if (path == "/chat/" + it.id) {
+                scheduleNativeChatProbe(it.id)
+                scheduleChatProbe(it.id)
+              }
             }
             if (signingIn && selectedWorldThread == null &&
                 path != "/auth" && path != "/login" && path != "/inbox" &&
@@ -348,6 +351,65 @@ class WorldInboxActivity : Activity() {
     }
   }
 
+  /**
+   * Pull the authenticated React chat snapshot when WebView's Java interface
+   * misses the initial push. This is the real message bridge, not the DOM
+   * scraping fallback. No credentials are transferred to native code.
+   */
+  private fun scheduleNativeChatProbe(conversationId: String) {
+    for (delay in longArrayOf(500L, 1600L, 3200L, 6000L, 11000L, 18000L, 26000L)) {
+      Handler(Looper.getMainLooper()).postDelayed({
+        if (!isFinishing && !isDestroyed && selectedWorldThread?.id == conversationId &&
+            !chatBridgeLoaded) probeNativeChatState(conversationId)
+      }, delay)
+    }
+  }
+
+  private fun probeNativeChatState(conversationId: String) {
+    val browser = web ?: return
+    val url = browser.url.orEmpty()
+    if (!WorldBackend.isAllowed(url) ||
+        Uri.parse(url).path != "/chat/$conversationId") return
+    browser.evaluateJavascript(
+      "(function(){return window.__livingWorldNativeChatSnapshot || ''})()"
+    ) { raw ->
+      if (isFinishing || isDestroyed || selectedWorldThread?.id != conversationId ||
+          chatBridgeLoaded) return@evaluateJavascript
+      val snapshot = try { JSONTokener(raw).nextValue() as? String }
+        catch (_: Exception) { null }
+      if (!snapshot.isNullOrBlank() && snapshot.length <= 650000)
+        webBridge.receiveMessages(snapshot)
+    }
+  }
+
+  private fun scheduleSendResultProbe(requestId: String) {
+    for (delay in longArrayOf(1000L, 3000L, 6000L, 12000L, 22000L)) {
+      Handler(Looper.getMainLooper()).postDelayed({
+        if (isFinishing || isDestroyed || pendingAiRequestId != requestId)
+          return@postDelayed
+        val browser = web ?: return@postDelayed
+        if (!WorldBackend.isAllowed(browser.url.orEmpty())) return@postDelayed
+        browser.evaluateJavascript(
+          "(function(){return window.__livingWorldNativeSendStatus || ''})()"
+        ) { raw ->
+          if (pendingAiRequestId != requestId || isFinishing || isDestroyed)
+            return@evaluateJavascript
+          val response = try { JSONTokener(raw).nextValue() as? String }
+            catch (_: Exception) { null }
+          if (!response.isNullOrEmpty() && response.length <= 2000)
+            webBridge.receiveSendStatus(response)
+        }
+      }, delay)
+    }
+    Handler(Looper.getMainLooper()).postDelayed({
+      if (!isFinishing && !isDestroyed && pendingAiRequestId == requestId) {
+        pendingAiRequestId = null
+        pendingAiBody = null
+        aiStatus.text = "No send confirmation. Check the full chat before retrying."
+      }
+    }, 30000)
+  }
+
   private fun probeChatPreview(conversationId: String) {
     val browser = web ?: return
     val url = browser.url.orEmpty()
@@ -378,7 +440,7 @@ class WorldInboxActivity : Activity() {
             item.optBoolean("outgoing"), 0L, "")
         }
         renderAiMessages(parsed)
-        aiStatus.text = "Chat preview — publish the website bridge for native replies and photos."
+        aiStatus.text = "Preview only · Full chat available under ⋯"
       } catch (_: Exception) { /* Wait for the authenticated page to load. */ }
     }
   }
