@@ -80,7 +80,17 @@ class LauncherActivity : Activity() {
     super.onCreate(savedInstanceState)
     window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
       WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
-    showHome()
+    filter = savedInstanceState?.getString("drawerFilter").orEmpty()
+    when (savedInstanceState?.getString("page")) {
+      "APPS" -> showApps(false)
+      "MORE" -> showMore()
+      else -> showHome()
+    }
+  }
+  override fun onSaveInstanceState(outState: Bundle) {
+    outState.putString("page", page.name)
+    outState.putString("drawerFilter", filter)
+    super.onSaveInstanceState(outState)
   }
   override fun onResume() {
     super.onResume()
