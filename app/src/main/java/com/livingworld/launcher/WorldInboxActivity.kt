@@ -112,6 +112,9 @@ class WorldInboxActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     pendingGoogleSession = WorldOAuthHandoff.take()
+    if (pendingGoogleSession == null) {
+      WorldOAuthHandoff.takeFailure()?.let { bridgeDiagnostic = it }
+    }
     window.statusBarColor = UiKit.bg
     window.navigationBarColor = UiKit.bg
     window.decorView.systemUiVisibility =
@@ -388,6 +391,12 @@ class WorldInboxActivity : Activity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     pendingGoogleSession = WorldOAuthHandoff.take() ?: pendingGoogleSession
+    if (pendingGoogleSession == null) {
+      WorldOAuthHandoff.takeFailure()?.let {
+        bridgeDiagnostic = it
+        if (::rows.isInitialized) render(worldThreads)
+      }
+    }
     if (pendingGoogleSession != null) {
       googleSessionApplying = false
       bridgeDiagnostic = "Google sign-in returned! Connecting your AI messages…"
