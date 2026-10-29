@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
+import android.widget.EditText
 import android.widget.ScrollView
 import android.widget.Toast
 
@@ -90,12 +91,40 @@ class SmsThreadActivity : Activity() {
       stack.addView(line)
       stack.addView(UiKit.gap(this, 5))
     }
-    root.addView(UiKit.clickable(this, "Reply or send a picture") {
+    // Keep text entry attached to the conversation instead of navigating
+    // through a separate compose screen for every reply.
+    val composer = UiKit.horizontal(this)
+    val textInput = EditText(this).apply {
+      hint = "Message"
+      minLines = 1
+      maxLines = 5
+      setSingleLine(false)
+      background = UiKit.surface(this@SmsThreadActivity)
+      setPadding(UiKit.dp(this@SmsThreadActivity, 12),
+        UiKit.dp(this@SmsThreadActivity, 9),
+        UiKit.dp(this@SmsThreadActivity, 12),
+        UiKit.dp(this@SmsThreadActivity, 9))
+    }
+    val destination = address
+    composer.addView(UiKit.clickable(this, "＋") {
       startActivity(Intent(this, SmsComposeActivity::class.java)
-        .putExtra("address", intent.getStringExtra("address").orEmpty()))
+        .putExtra("address", destination))
     })
-    root.addView(UiKit.text(this,
-      "Carrier test mode: verify sent and delivered results in Messages > Carrier test.",
-      12f, UiKit.muted))
+    composer.addView(textInput, LinearLayout.LayoutParams(0, -2, 1f))
+    composer.addView(UiKit.clickable(this, "➤") {
+      val message = textInput.text.toString().trim()
+      if (message.isBlank()) return@clickable
+      when (val result = SmsTransport.send(this, destination, message)) {
+        is SmsTransport.Validation.Ready -> {
+          textInput.setText("")
+          Toast.makeText(this, "Submitted to carrier; delivery pending", Toast.LENGTH_SHORT).show()
+          // Refresh provider history after the sender writes the outbox record.
+          recreate()
+        }
+        is SmsTransport.Validation.Blocked ->
+          Toast.makeText(this, result.reason, Toast.LENGTH_LONG).show()
+      }
+    })
+    root.addView(composer)
   }
 }
