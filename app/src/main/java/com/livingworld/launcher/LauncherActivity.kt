@@ -74,6 +74,7 @@ class LauncherActivity : Activity() {
   private var homePage = 0
   private var drawerIndex = 0
   private var drawerScroller: HorizontalScrollView? = null
+  private var drawerDrawPage: ((Int) -> Unit)? = null
   private var drawerPages = 0
   private var drawerDots: TextView? = null
   private var page = Page.HOME
@@ -669,6 +670,9 @@ class LauncherActivity : Activity() {
     }
 
   private fun showHome() {
+    drawerRefresh = null
+    drawerDrawPage = null
+    drawerScroller = null
     page = Page.HOME
     val root = stage()
     val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -775,6 +779,7 @@ class LauncherActivity : Activity() {
   }
   private fun slideDrawer(index: Int) {
     drawerIndex = index.coerceIn(0, (drawerPages - 1).coerceAtLeast(0))
+    drawerDrawPage?.invoke(drawerIndex)
     drawerScroller?.smoothScrollTo(drawerIndex * width(), 0)
     updateDrawerDots()
   }
@@ -828,36 +833,57 @@ class LauncherActivity : Activity() {
     })
     root.addView(pagerBar)
 
-    val items = listOf("world", "phone", "messages", "contacts", "settings").map(::builtIn) +
-      installed().map(::systemApp)
+    // Size pages from the actual measured drawer viewport, not the screen
+    // height. Window insets, keyboard and Samsung Fold taskbars reduce it.
+    // Render only the visible page so hundreds of app icons don't delay opening.
+    var pageGroups: List<List<Shortcut>> = emptyList()
+    var pageViews: List<FrameLayout> = emptyList()
+    fun populate(index: Int) {
+      val panel = pageViews.getOrNull(index) ?: return
+      if (panel.childCount > 0) return
+      val entries = pageGroups.getOrNull(index).orEmpty()
+      if (entries.isEmpty()) {
+        panel.addView(text("No matching apps", 16f).apply { gravity = Gravity.CENTER },
+          FrameLayout.LayoutParams(-1, -1))
+      } else {
+        panel.addView(grid(entries) { cell -> pinApp(entries[cell]) },
+          FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+      }
+    }
+    drawerDrawPage = { index ->
+      populate(index)
+      // Keep icon work bounded to the current/adjacent drawer pages.
+      pageViews.forEachIndexed { i, panel ->
+        if (kotlin.math.abs(i - index) > 1 && panel.childCount > 0) panel.removeAllViews()
+      }
+    }
     fun render(query: String, reset: Boolean = true) {
       pages.removeAllViews()
       if (reset) drawerIndex = 0
-      val filtered = items.filter { it.label.contains(query.trim(), true) }
-      // Page by *rows*, not a long vertical scroll. Fold6 uses 4-6 columns
-      // based on current width; page size also adapts to the current height.
-      val availableRows = ((resources.configuration.screenHeightDp - 290) / 98)
-        .coerceIn(3, 6)
-      val groups = filtered.chunked(cols() * availableRows)
-      drawerPages = groups.size.coerceAtLeast(1)
-      val segments = if (groups.isEmpty()) listOf(emptyList()) else groups
-      for (batch in segments) {
-        val panel = FrameLayout(this)
-        if (batch.isEmpty()) {
-          panel.addView(text("No matching apps", 16f).apply { gravity = Gravity.CENTER },
-            FrameLayout.LayoutParams(-1, -1))
-        } else {
-          val positions = batch.toList()
-          panel.addView(grid(positions) { index -> pinApp(positions[index]) },
-            FrameLayout.LayoutParams(-1, -2, Gravity.TOP))
+      val installed = installed()
+      val filtered = (listOf("world", "phone", "messages", "contacts", "settings")
+        .map(::builtIn) + installed.map(::systemApp))
+        .filter { it.label.contains(query.trim(), ignoreCase = true) }
+      val available = (carousel.height - dp(20)).coerceAtLeast(dp(97) * 2)
+      val rows = (available / dp(97)).coerceIn(2, 6)
+      pageGroups = if (filtered.isEmpty()) listOf(emptyList())
+        else filtered.chunked(cols() * rows)
+      drawerPages = pageGroups.size
+      pageViews = pageGroups.map {
+        FrameLayout(this).also { frame ->
+          pages.addView(frame, LinearLayout.LayoutParams(width(), -1))
         }
-        pages.addView(panel, LinearLayout.LayoutParams(width(), -1))
       }
       drawerIndex = drawerIndex.coerceIn(0, drawerPages - 1)
+      populate(drawerIndex)
       carousel.post { carousel.scrollTo(drawerIndex * width(), 0) }
       updateDrawerDots()
     }
-    render(filter, false)
+    drawerRefresh = { render(filter, false) }
+    // Render after layout so viewport height includes top/bottom system insets.
+    carousel.post {
+      if (!isFinishing && !isDestroyed && page == Page.APPS) render(filter, false)
+    }
     search.addTextChangedListener(object : TextWatcher {
       override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) { }
       override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -876,6 +902,9 @@ class LauncherActivity : Activity() {
     dock(root)
   }
   private fun showMore() {
+    drawerRefresh = null
+    drawerDrawPage = null
+    drawerScroller = null
     hideKeyboard()
     page = Page.MORE
     val root = stage()
