@@ -554,7 +554,18 @@ class WorldInboxActivity : Activity() {
     }
   }
 
+  private fun hideComposerKeyboard() {
+    if (!::aiComposer.isInitialized) return
+    try {
+      getSystemService(InputMethodManager::class.java)
+        ?.hideSoftInputFromWindow(aiComposer.windowToken, 0)
+    } catch (_: Exception) { /* Closing navigation must work without IME. */ }
+    aiComposer.clearFocus()
+    if (::chatPage.isInitialized) chatPage.requestFocus()
+  }
+
   private fun showNative() {
+    hideComposerKeyboard()
     showingConversation = false
     signingIn = false
     selectedWorldThread = null
@@ -566,6 +577,7 @@ class WorldInboxActivity : Activity() {
     render(worldThreads)
   }
   private fun showBrowser(url: String) {
+    hideComposerKeyboard()
     showingConversation = true
     signingIn = true
     bridgeDiagnostic = "Waiting for the published Living World website to sync…"
@@ -581,10 +593,14 @@ class WorldInboxActivity : Activity() {
     pendingAiBody = null
     showingConversation = true
     signingIn = false
+    lastChatSignature = null
     listPage.visibility = View.GONE
     chatPage.visibility = View.VISIBLE
     setWebMode(false)
+    hideComposerKeyboard()
     aiComposer.setText("")
+    chatPage.requestFocus()
+    chatScroll.scrollTo(0, 0)
     aiStatus.text = "Loading messages…"
     chatMessages.removeAllViews()
     val header = chatPage.getChildAt(0) as? LinearLayout
