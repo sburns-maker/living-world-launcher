@@ -53,7 +53,7 @@ class WorldInboxActivity : Activity() {
   private var worldAuthenticated = false
   private var pendingGoogleSession: WorldOAuthHandoff.Session? = null
   private var googleSessionApplying = false
-  private var bridgeDiagnostic = "Sign in inside the app to sync AI conversations."
+  private var bridgeDiagnostic = "Tap Connect with Google to link your existing Living World account."
   private var lastAuthError: String? = null
   private var webBridgeLoaded = false
   private var chatBridgeLoaded = false
@@ -252,7 +252,7 @@ class WorldInboxActivity : Activity() {
     if (path != "/inbox") {
       if (!worldAuthenticated) {
         bridgeDiagnostic = if (path == "/auth" || path == "/login")
-          "Sign in on the page inside this app; your Chrome session is separate."
+          "Use Connect with Google to securely return your existing Chrome login to this app."
         else "Website opened $path; waiting for its inbox."
         if (!showingConversation) render(worldThreads)
       }
