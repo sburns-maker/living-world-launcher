@@ -57,6 +57,8 @@ class WorldInboxActivity : Activity() {
   private var lastAuthError: String? = null
   private var webBridgeLoaded = false
   private var chatBridgeLoaded = false
+  private var pendingAiRequestId: String? = null
+  private var pendingAiBody: String? = null
   private var showingConversation = false
   private var worldThreads = emptyList<Thread>()
   private val pictures = Executors.newFixedThreadPool(2)
@@ -83,6 +85,31 @@ class WorldInboxActivity : Activity() {
         bridgeDiagnostic = "Connected — ${parsed.size} AI conversations synchronized."
         if (signingIn) showNative()
         render(parsed)
+      }
+    }
+    @JavascriptInterface fun receiveSendStatus(json: String) {
+      if (json.length > 2000) return
+      val parsed = try {
+        val data = JSONObject(json)
+        Triple(data.optString("conversationId"), data.optString("requestId"),
+          data.optString("status"))
+      } catch (_: Exception) { return }
+      runOnUiThread {
+        if (isFinishing || isDestroyed ||
+            selectedWorldThread?.id != parsed.first ||
+            pendingAiRequestId != parsed.second) return@runOnUiThread
+        val status = parsed.third
+        if (status !in listOf("sent", "queued", "failed", "ignored")) return@runOnUiThread
+        if (status == "sent" || status == "queued") {
+          if (aiComposer.text.toString().trim() == pendingAiBody) aiComposer.setText("")
+        }
+        aiStatus.text = when (status) {
+          "sent" -> "Sent to Living World"
+          "queued" -> "Saved in Living World outbox — confirmation pending"
+          else -> "Sending was not confirmed. Your draft is preserved."
+        }
+        pendingAiBody = null
+        pendingAiRequestId = null
       }
     }
     @JavascriptInterface fun receiveMessages(json: String) {
@@ -474,6 +501,8 @@ class WorldInboxActivity : Activity() {
   private fun openNativeWorldChat(thread: Thread) {
     selectedWorldThread = thread
     chatBridgeLoaded = false
+    pendingAiRequestId = null
+    pendingAiBody = null
     showingConversation = true
     signingIn = false
     listPage.visibility = View.GONE
@@ -486,6 +515,7 @@ class WorldInboxActivity : Activity() {
     (header?.getChildAt(1) as? android.widget.TextView)?.text = thread.name
     web?.loadUrl(WorldBackend.ORIGIN + "/chat/" + thread.id)
     scheduleChatProbe(thread.id)
+    scheduleNativeChatProbe(thread.id)
   }
   private fun sendAiText() {
     val thread = selectedWorldThread ?: return
@@ -496,7 +526,11 @@ class WorldInboxActivity : Activity() {
       return
     }
     if (!chatBridgeLoaded) {
-      Toast.makeText(this, "Live AI replies require the published website bridge. Open ⋯ for full chat.", Toast.LENGTH_LONG).show()
+      Toast.makeText(this, "AI reply connection isn't ready. Tap ⋯ to use the full website chat.", Toast.LENGTH_LONG).show()
+      return
+    }
+    if (pendingAiRequestId != null) {
+      Toast.makeText(this, "Waiting for your previous message result. Don't send twice.", Toast.LENGTH_LONG).show()
       return
     }
     if (android.net.Uri.parse(web?.url).path != "/chat/" + thread.id ||
@@ -507,17 +541,24 @@ class WorldInboxActivity : Activity() {
     }
     val id = JSONObject.quote(thread.id)
     val safeText = JSONObject.quote(body)
+    val requestId = java.util.UUID.randomUUID().toString()
+    pendingAiRequestId = requestId
+    pendingAiBody = body
+    aiStatus.text = "Submitting to Living World…"
     val js = "(function(){if(window.__livingWorldNativeChatReady!==" + id +
       ")return 'not-ready';window.dispatchEvent(new CustomEvent(" +
       "'living-world-native-send',{detail:{conversationId:" + id +
-      ",text:" + safeText + "}}));return 'accepted';})()"
+      ",text:" + safeText + ",requestId:" + JSONObject.quote(requestId) +
+      "}}));return 'accepted';})()"
     web?.evaluateJavascript(js) { result ->
-      if (result == "\"accepted\"") {
-        aiComposer.setText("")
-        aiStatus.text = "Sending through Living World…"
+      if (isFinishing || isDestroyed || pendingAiRequestId != requestId) return@evaluateJavascript
+      if (result != "\"accepted\"") {
+        pendingAiRequestId = null
+        pendingAiBody = null
+        aiStatus.text = "Message was not submitted. Keep your draft and try again."
       } else {
-        Toast.makeText(this, "AI chat not ready. Message was not submitted.",
-          Toast.LENGTH_LONG).show()
+        aiStatus.text = "Waiting for Living World to confirm…"
+        scheduleSendResultProbe(requestId)
       }
     }
   }
