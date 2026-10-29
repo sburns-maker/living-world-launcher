@@ -29,8 +29,10 @@ class WorldOAuthCallbackActivity : Activity() {
           startActivity(Intent(this, WorldInboxActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         } else {
-          Toast.makeText(this,
-            result.exceptionOrNull()?.message ?: "Google sign-in could not be completed",
+          WorldOAuthHandoff.publishFailure(
+            result.exceptionOrNull()?.message ?: "Google sign-in could not be completed"
+          )
+          Toast.makeText(this, "Google sign-in needs attention. See Messages for details.",
             Toast.LENGTH_LONG).show()
           startActivity(Intent(this, WorldInboxActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
