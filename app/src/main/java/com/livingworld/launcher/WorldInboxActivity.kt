@@ -18,6 +18,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
+import android.view.WindowManager
+import android.view.inputmethod.InputMethodManager
 import android.view.View
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
@@ -42,6 +44,7 @@ class WorldInboxActivity : Activity() {
   private data class WorldMessage(val id: String, val text: String, val outgoing: Boolean, val at: Long, val photo: String)
   private var web: WebView? = null
   private lateinit var rows: LinearLayout
+  private lateinit var inboxScroll: ScrollView
   private lateinit var listPage: LinearLayout
   private lateinit var chatPage: LinearLayout
   private lateinit var chatMessages: LinearLayout
@@ -60,6 +63,8 @@ class WorldInboxActivity : Activity() {
   private var pendingAiRequestId: String? = null
   private var pendingAiBody: String? = null
   private var showingConversation = false
+  private var lastChatSignature: Int? = null
+  private var lastInboxSignature: Int? = null
   private var worldThreads = emptyList<Thread>()
   private val pictures = Executors.newFixedThreadPool(2)
   private val webBridge = object {
@@ -139,6 +144,8 @@ class WorldInboxActivity : Activity() {
   }
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
+      WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
     pendingGoogleSession = WorldOAuthHandoff.take()
     if (pendingGoogleSession != null) lastAuthError = null
     if (pendingGoogleSession == null) {
@@ -162,15 +169,18 @@ class WorldInboxActivity : Activity() {
     header.addView(UiKit.clickable(this, "✎") { startActivity(Intent(this, SmsComposeActivity::class.java)) })
     listPage.addView(header)
     rows = UiKit.vertical(this)
-    val conversationScroll = ScrollView(this).apply {
+    inboxScroll = ScrollView(this).apply {
       isFillViewport = true
       isVerticalScrollBarEnabled = true
       overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
     }
-    conversationScroll.addView(rows)
-    listPage.addView(conversationScroll, LinearLayout.LayoutParams(-1, 0, 1f))
+    inboxScroll.addView(rows)
+    listPage.addView(inboxScroll, LinearLayout.LayoutParams(-1, 0, 1f))
     root.addView(listPage, LinearLayout.LayoutParams(-1, 0, 1f))
-    chatPage = UiKit.vertical(this, 8).apply { visibility = View.GONE }
+    chatPage = UiKit.vertical(this, 8).apply {
+      visibility = View.GONE
+      isFocusableInTouchMode = true
+    }
     val chatHeader = UiKit.horizontal(this)
     chatHeader.addView(UiKit.clickable(this, "‹") { showNative() })
     val title = UiKit.text(this, "Conversation", 19f, UiKit.ink, true)
@@ -184,7 +194,11 @@ class WorldInboxActivity : Activity() {
     chatPage.addView(chatHeader)
     aiStatus = UiKit.text(this, "Loading AI conversation…", 12f, UiKit.muted)
     chatPage.addView(aiStatus)
-    chatScroll = ScrollView(this).apply { isFillViewport = true }
+    chatScroll = ScrollView(this).apply {
+      isFillViewport = true
+      isVerticalScrollBarEnabled = true
+      overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+    }
     chatMessages = UiKit.vertical(this, 10)
     chatScroll.addView(chatMessages)
     chatPage.addView(chatScroll, LinearLayout.LayoutParams(-1, 0, 1f))
